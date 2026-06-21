@@ -471,6 +471,50 @@ async function banMikrotikDevice(macAddress: string, voucherCode: string, siteId
   }
 }
 
+async function setTetheringBlock(enabled: boolean, siteId?: string): Promise<{ success: boolean; message: string }> {
+  const config = await getMikrotikConfig(siteId);
+  const authHeader = 'Basic ' + Buffer.from(`${config.username}:${config.password}`).toString('base64');
+
+  try {
+    const comment = "BLOCK_TETHERING_AUTO";
+    const findRes = await fetch(`http://${config.host}/rest/ip/firewall/mangle?comment=${comment}`, {
+      method: 'GET',
+      headers: { 'Authorization': authHeader },
+    });
+
+    const rules = await findRes.json();
+
+    if (enabled) {
+      if (!Array.isArray(rules) || rules.length === 0) {
+        await fetch(`http://${config.host}/rest/ip/firewall/mangle/add`, {
+          method: 'POST',
+          headers: { 'Authorization': authHeader, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chain: 'postrouting',
+            action: 'change-ttl',
+            'new-ttl': 'set:1',
+            comment: comment
+          }),
+        });
+      }
+    } else {
+      if (Array.isArray(rules)) {
+        for (const rule of rules) {
+          await fetch(`http://${config.host}/rest/ip/firewall/mangle/remove`, {
+            method: 'POST',
+            headers: { 'Authorization': authHeader, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ '.id': rule['.id'] }),
+          });
+        }
+      }
+    }
+
+    return { success: true, message: `Tethering block ${enabled ? 'enabled' : 'disabled'}` };
+  } catch (error: any) {
+    return { success: false, message: error.message };
+  }
+}
+
 export {
   activateHotspotSession,
   createMikrotikVoucher,
@@ -486,5 +530,6 @@ export {
   getMikrotikExport,
   scanForRogueAPs,
   addVoucherTime,
-  banMikrotikDevice
+  banMikrotikDevice,
+  setTetheringBlock
 };
