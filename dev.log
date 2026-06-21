@@ -1,0 +1,127 @@
+
+> fulifi@0.1.0 dev
+> next dev
+
+ ⚠ Port 3000 is in use, trying 3001 instead.
+ ⚠ Port 3001 is in use, trying 3002 instead.
+ ⚠ Port 3002 is in use, trying 3003 instead.
+ ⚠ Port 3003 is in use, trying 3004 instead.
+   ▲ Next.js 15.1.0
+   - Local:           Reload env: .env.local
+ ○ Compiling / ...
+ ✓ Compiled / in 14.6s (628 modules)
+ GET / 200 in 15517ms
+ ○ Compiling /favicon.ico ...
+ ✓ Compiled /favicon.ico [Error: ENOENT: no such file or directory, scandir 'C:\Users\hp\Desktop\fulifi\fulifi\app'] {
+  errno: -4058,[Error: ENOENT: no such file or directory, scandir 'C:\Users\hp\Desktop\fulifi\fulifi\app'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'scandir',
+  path: 'C:\\Users\\hp\\Desktop\\fulifi\\fulifi\\app'
+}
+ ⨯ [Error: ENOENT: no such file or directory, scandir 'C:\Users\hp\Desktop\fulifi\fulifi\app'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'scandir',
+  path: 'C:\\Users\\hp\\Desktop\\fulifi\\fulifi\\app'
+}
+ ⨯ unhandledRejection: [Error: ENOENT: no such file or directory, scandir 'C:\Users\hp\Desktop\fulifi\fulifi\app'] {
+  errno: -4058,
+  code:  ⚠ Found a change in next.config.ts. Restarting the server to apply the changes...
+   ▲ Next.js 15.1.0
+   - Local:        http://localhost:3004
+   - Network:      http://192.168.88.50:3004
+   - Environments: .env.local, .env
+
+ ✓ Starting...
+ ✓ Ready in 7.5s
+   Reload env: .env.local
+ifi\.next\cache\webpack\client-development\2.pack.gz_' -> 'C:\Us ⚠ Found a change in next.config.ts. Restarting the server to apply the changes...
+   ▲ Next.js 15.1.0
+   - Local:        http://localhost:3002
+   - Network:      http://192.168.88.50:3002
+   - Environments: .env.local, .env
+
+ ✓ Starting...
+ ✓ Ready in 7.2s
+   Reload env: .env.local
+env.local, .env
+
+ ✓ Starting...
+ ✓ Ready in 7.4s
+   Reload env: .env.local
+no such file or directory, scandir 'C:\Users\hp\Desktop\fulifi\fulifi\app'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'scandir',
+  path: 'C:\\Users\\hp\\Desktop\\fulifi\\fulifi\\app'
+}
+[Error: ENOENT: no such file or directory, scandir 'C:\Users\hp\Desktop\fulifi\fulifi\app'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'scandir',
+  path: 'C:\\Users\\hp\\Desktop\\fulifi\\fulifi\\app'
+}
+[Error: ENOENT: no such file or directory, scandir 'C:\Users\hp\Desktop\fulifi\fulifi\app'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'scandir',
+  path: 'C:\\Users\\hp\\Desktop\\fulifi\\fulifi\\app'
+}
+[Error: ENOENT: no such file or directory, scandir 'C:\Users\hp\Desktop\fulifi\fulifi\app'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'scandir',
+  path: 'C:\\Users\\hp\\Desktop\\fulifi\\fulifi\\app'
+}
+[Error: ENOENT: no such file or directory, scandir 'C:\Users\hp\Desktop\fulifi\fulifi\app'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'scandir',
+  path: 'C:\\Users\\hp\\Desktop\\fulifi\\fulifi\\app'
+}
+[Error: ENOENT: no such file or directory, scandir 'C:\Users\hp\Desktop\fulifi\fulifi\app'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'scandir',
+  path: 'C:\\Users\\hp\\Desktop\\fulifi\\fulifi\\app'
+}
+[Error: ENOENT: no such file or directory, scandir 'C:\Users\hp\Desktop\fulifi\fulifi\app'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'scandir',
+  path: 'C:\\Users\\hp\\Desktop\\fulifi\\fulifi\\app'
+}
+[Error: ENOENT: no such file or directory, scandir 'C:\Users\hp\Desktop\fulifi\fulifi\app'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'scandir',
+  path: 'C:\\Users\\hp\\Desktop\\fulifi\\fulifi\\app'
+}
+[Error: ENOENT: no such file or directory, scandir 'C:\Users\hp\Desktop\fulifi\fulifi\app'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'scandir',
+  path: 'C:\\Users\\hp\\Desktop\\fulifi\\fulifi\\app'
+}
+[Error: ENOENT: no such file or directory, scandir 'C:\Users\hp\Desktop\fulifi\fulifi\app'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'scandir',
+  path: 'C:\\Users\\hp\\Desktop\\fulifi\\fulifi\\app'
+}
+[Error: ENOENT: no such file or directory, scandir 'C:\Users\hp\Desktop\fulifi\fulifi\app'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'scandir',
+  path: 'C:\\Users\\hp\\Desktop\\fulifi\\fulifi\\app'
+}
+ ⚠ Found a change in next.config.ts. Restarting the server to apply the changes...
+   ▲ Next.js 15.1.0
+   - Local:        http://localhost:3001
+   - Network:      http://192.168.88.50:3001
+   - Environments: .env.local, .env
+
+ ✓ Starting...
+ ✓ Ready in 7.4s
+   Reload env: .env.local

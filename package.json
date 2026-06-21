@@ -1,5 +1,5 @@
 {
-  "name": "fulifi",
+  "name": "starlinknet-wifi",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -9,14 +9,23 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@prisma/client": "^6.19.3",
+    "@supabase/supabase-js": "^2.47.10",
+    "lucide-react": "^1.18.0",
+    "mikrotik": "^1.0.12",
+    "next": "^15.5.19",
+    "paystack-api": "^2.0.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "next": "15.1.0"
+    "routeros-client": "^1.1.1"
   },
   "devDependencies": {
-    "typescript": "^5.0.0",
     "@types/node": "^20.0.0",
     "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0"
+    "@types/react-dom": "^19.0.0",
+    "eslint": "^10.4.1",
+    "eslint-config-next": "^16.2.7",
+    "prisma": "^6.19.3",
+    "typescript": "^5.0.0"
   }
 }

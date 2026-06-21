@@ -15,6 +15,10 @@ model Voucher {
   isUsed      Boolean   @default(false)
   createdAt   DateTime  @default(now())
   activatedAt DateTime?
+  siteId      String    @default("default-site")
+  site        Site      @relation(fields: [siteId], references: [id])
+
+  @@index([code])
 }
 
 model ActiveSession {
@@ -22,6 +26,140 @@ model ActiveSession {
   macAddress  String    @unique
   ipAddress   String
   voucherCode String
+  deviceType  String    @default("PHONE") // "PHONE", "TV", "LAPTOP"
   expiresAt   DateTime
   createdAt   DateTime  @default(now())
+  siteId      String    @default("default-site")
+  site        Site      @relation(fields: [siteId], references: [id])
+
+  @@index([voucherCode])
+  @@index([macAddress])
+}
+
+model VoucherOffer {
+  id             String   @id @default(cuid())
+  name           String
+  duration       String   // e.g., '1 hour' or '1 day'
+  durationMin    Int
+  expiryMode     String   @default("CONTINUOUS") // "CONTINUOUS" or "ACTIVE_ONLY"
+  price          Float
+  maxDevices     Int      @default(1)
+  speedLimit     String?  // e.g., '5M/5M'
+  downloadLimit  String   @default("5M")
+  uploadLimit    String   @default("5M")
+  dataLimitMB    Int?     // Total data allowed in MB
+  burstLimit     String?  // e.g., '10M/10M'
+  burstThreshold String?  // e.g., '7M/7M'
+  burstTime      String?  // e.g., '10s/10s'
+  allowTethering Boolean  @default(true)
+  isSystem       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  BulkVoucher    BulkVoucher[]
+  Payment        Payment[]
+  siteId         String   @default("default-site")
+  site           Site     @relation(fields: [siteId], references: [id])
+}
+
+model Payment {
+  id             String       @id @default(cuid())
+  transactionRef String?      @unique
+  idempotencyKey String?      @unique // Prevents double charging
+  amount         Float
+  phoneNumber    String?
+  voucherCode    String
+  offerId        String?      // Link to the offer for itemized earnings
+  offer          VoucherOffer? @relation(fields: [offerId], references: [id])
+  status         String       @default("active") // 'active', 'expired', 'failed', 'deleted', 'processing'
+  provisioned    Boolean      @default(false)    // Tracks if successfully pushed to MikroTik
+  retryCount     Int          @default(0)
+  resultDesc     String?      // Failure reason or success detail
+  createdAt      DateTime     @default(now())
+  expiresAt      DateTime
+  siteId         String       @default("default-site")
+  site           Site         @relation(fields: [siteId], references: [id])
+
+  @@index([voucherCode])
+  @@index([transactionRef])
+  @@index([idempotencyKey])
+  @@index([provisioned, status])
+}
+
+model PaymentEvent {
+  id                String   @id @default(cuid())
+  externalReference String   @unique // CheckoutRequestID
+  phoneNumber       String?
+  amount            Float?
+  status            String   // 'SUCCESS', 'CANCELLED', 'FAILED', 'PENDING'
+  resultDesc        String?
+  macAddress        String?
+  ipAddress         String?
+  offerId           String?
+  createdAt         DateTime @default(now())
+  siteId            String   @default("default-site")
+  site              Site     @relation(fields: [siteId], references: [id])
+}
+
+model BulkVoucher {
+  id          String       @id @default(cuid())
+  voucherCode String       @unique
+  offerId     String
+  offer       VoucherOffer @relation(fields: [offerId], references: [id])
+  isUsed      Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+  siteId      String       @default("default-site")
+  site        Site         @relation(fields: [siteId], references: [id])
+}
+
+model Site {
+  id           String   @id @default(cuid())
+  name         String
+  location     String?
+  routerHost   String?
+  routerUser   String?
+  routerPass   String?
+  createdAt    DateTime @default(now())
+  Voucher      Voucher[]
+  ActiveSession ActiveSession[]
+  VoucherOffer  VoucherOffer[]
+  Payment       Payment[]
+  PaymentEvent  PaymentEvent[]
+  BulkVoucher   BulkVoucher[]
+  Backups      RouterBackup[]
+  SecurityAlert SecurityAlert[]
+}
+
+model RouterBackup {
+  id        String   @id @default(cuid())
+  siteId    String
+  site      Site     @relation(fields: [siteId], references: [id])
+  filename  String
+  content   String   // Stores the .rsc content
+  createdAt DateTime @default(now())
+}
+
+model SecurityAlert {
+  id        String   @id @default(cuid())
+  siteId    String
+  site      Site     @relation(fields: [siteId], references: [id])
+  type      String   // "ROGUE_AP", "BRUTE_FORCE", "OFFLINE"
+  message   String
+  severity  String   // "LOW", "MEDIUM", "HIGH", "CRITICAL"
+  isResolved Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model SystemSetting {
+  id         String   @id @default("global")
+  bannerText String   @default("")
+  bannerType String   @default("info") // "info", "warning", "maintenance"
+  updatedAt  DateTime @updatedAt
+}
+
+model SpeedTest {
+  id        String   @id @default(cuid())
+  download  Float    // in Mbps
+  upload    Float    // in Mbps
+  ping      Float    // in ms
+  isp       String?
+  createdAt DateTime @default(now())
 }
