@@ -31,12 +31,17 @@ export default function PayPage() {
   useEffect(() => {
     // 1. Capture Router Vars
     const params = new URLSearchParams(window.location.search);
-    const urlMac = params.get('mac') || "";
-    const urlIp = params.get('ip') || "";
+    const urlMac = params.get('mac') || localStorage.getItem('last_mac') || "";
+    const urlIp = params.get('ip') || localStorage.getItem('last_ip') || "";
     const urlSiteId = params.get('siteId') || "default-site";
+
     setMac(urlMac);
     setIp(urlIp);
     setSiteId(urlSiteId);
+
+    if (urlMac) localStorage.setItem('last_mac', urlMac);
+    if (urlIp) localStorage.setItem('last_ip', urlIp);
+
     setLinkLogin(params.get('link-login') || params.get('link-login-only') || "");
     setLinkOrig(params.get('link-orig') || "");
 

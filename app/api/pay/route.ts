@@ -38,6 +38,11 @@ export async function POST(request: Request) {
     // Paystack expects amount in Kobo (or cents) but for KES it's usually just the amount * 100
     const amountInMinorUnits = Math.round(price * 100);
 
+    const callbackUrl = new URL(process.env.NEXT_PUBLIC_BASE_URL || 'https://fulifi-rr9u.vercel.app');
+    if (mac) callbackUrl.searchParams.set('mac', mac);
+    if (ip) callbackUrl.searchParams.set('ip', ip);
+    if (siteId) callbackUrl.searchParams.set('siteId', siteId);
+
     const paystackResponse = await fetch('https://api.paystack.co/transaction/initialize', {
       method: 'POST',
       headers: {
@@ -55,7 +60,7 @@ export async function POST(request: Request) {
           packageId,
           phoneNumber
         },
-        callback_url: `${process.env.NEXT_PUBLIC_BASE_URL || 'https://fulifi-rr9u.vercel.app'}`
+        callback_url: callbackUrl.toString()
       })
     });
 
