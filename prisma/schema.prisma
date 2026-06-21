@@ -150,10 +150,11 @@ model SecurityAlert {
 }
 
 model SystemSetting {
-  id         String   @id @default("global")
-  bannerText String   @default("")
-  bannerType String   @default("info") // "info", "warning", "maintenance"
-  updatedAt  DateTime @updatedAt
+  id              String   @id @default("global")
+  bannerText      String   @default("")
+  bannerType      String   @default("info") // "info", "warning", "maintenance"
+  blockTethering  Boolean  @default(false)
+  updatedAt       DateTime @updatedAt
 }
 
 model SpeedTest {
