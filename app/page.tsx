@@ -139,11 +139,15 @@ export default function PayPage() {
       });
 
       const text = await res.text();
-      if (text.toLowerCase().includes('<!doctype html>') || text.toLowerCase().includes('<html')) {
-        throw new Error("Tunnel blocked. Please click 'Continue' on the warning page first.");
+
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        console.error("JSON Parse Error. Raw response:", text);
+        throw new Error(text.slice(0, 100) || "Server returned an empty response. Please check if M-Pesa environment variables are set.");
       }
 
-      const data = JSON.parse(text);
       if (!res.ok) throw new Error(data.error || "Payment failed");
 
       if (data.status === "success") {
