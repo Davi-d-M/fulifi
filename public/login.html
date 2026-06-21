@@ -4,8 +4,7 @@
     <meta charset="utf-8">
     <title>Starlinknet.WIFI - Redirecting</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <!-- Meta refresh as a fallback if JS fails -->
-    <meta http-equiv="refresh" content="5; url=https://oil-cinnamon-starfish.ngrok-free.dev?mac=$(mac)&ip=$(ip)&link-login=$(link-login-only)&link-orig=$(link-orig)">
+    <meta http-equiv="refresh" content="5; url=https://YOUR-VERCEL-DOMAIN.vercel.app?mac=$(mac)&ip=$(ip)&link-login=$(link-login-only)&link-orig=$(link-orig)">
     <style>
         body { background: #0f172a; color: white; font-family: sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
         .box { text-align: center; padding: 30px; border: 1px solid #334155; border-radius: 16px; background: #1e293b; max-width: 400px; width: 90%; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
@@ -19,27 +18,13 @@
         <h2 style="margin-top:0">Starlinknet.<span style="color:#6366f1">WIFI</span></h2>
         <div class="spinner"></div>
         <p>Redirecting to Payment Portal...</p>
-        <p style="font-size: 12px; color: #94a3b8;">If you are not redirected automatically:</p>
         <a id="manual-link" href="#" class="btn">Click Here to Connect</a>
     </div>
-
     <script>
-        var PORTAL_URL = 'https://oil-cinnamon-starfish.ngrok-free.dev';
-
-        // Construct the URL with MikroTik variables
-        var destination = PORTAL_URL +
-            "?mac=" + encodeURIComponent("$(mac)") +
-            "&ip=" + encodeURIComponent("$(ip)") +
-            "&link-login-only=" + encodeURIComponent("$(link-login-only)") +
-            "&link-orig=" + encodeURIComponent("$(link-orig)");
-
-        // Set the manual button link
+        var PORTAL_URL = 'https://YOUR-VERCEL-DOMAIN.vercel.app';
+        var destination = PORTAL_URL + "?mac=$(mac)&ip=$(ip)&link-login-only=$(link-login-only)&link-orig=$(link-orig)";
         document.getElementById('manual-link').href = destination;
-
-        // Perform the redirect
-        setTimeout(function() {
-            window.location.href = destination;
-        }, 500);
+        window.location.href = destination;
     </script>
 </body>
 </html>
