@@ -13,6 +13,8 @@ export default function PayPage() {
   const [tunnelBlocked, setTunnelBlocked] = useState(false);
   const [status, setStatus] = useState<{ success: boolean; message: string } | null>(null);
   const [isWaitingForPin, setIsWaitingForPin] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
+  const [purchasedVoucher, setPurchasedVoucher] = useState("");
   const [showRebind, setShowRebind] = useState(false);
   const [rebindValue, setRebindValue] = useState("");
   const [countdown, setCountdown] = useState(60);
@@ -104,12 +106,26 @@ export default function PayPage() {
     };
     fetchPlans();
 
-    // Fetch System Banner
-    fetch('/api/admin/settings', { headers: { 'ngrok-skip-browser-warning': 'true' } })
-      .then(res => res.json())
-      .then(data => {
-        if (data && data.bannerText) setSystemBanner({ text: data.bannerText, type: data.bannerType });
-      }).catch(() => {});
+    // Fetch System Banner (Announcements)
+    const fetchBanner = async () => {
+      try {
+        const res = await fetch('/api/admin/settings', {
+          headers: {
+            'ngrok-skip-browser-warning': 'true',
+            'Bypass-Tunnel-Reminder': 'true'
+          }
+        });
+        const data = await res.json();
+        if (data && data.bannerText && data.bannerText.trim() !== "") {
+          setSystemBanner({ text: data.bannerText, type: data.bannerType });
+        } else {
+          setSystemBanner(null);
+        }
+      } catch (err) {
+        console.error("Banner fetch failed:", err);
+      }
+    };
+    fetchBanner();
 
     // 5. Offline State Listener
     const handleOffline = () => setStatus({ success: false, message: "⚠️ Wi-Fi connection lost. Please reconnect to Starlinknet.WIFI" });
@@ -204,13 +220,14 @@ export default function PayPage() {
 
         const data = JSON.parse(text);
         if (data.success) {
-          setStatus({ success: true, message: "✅ Payment Confirmed! Connecting you now..." });
+          setPurchasedVoucher(data.voucherCode);
+          setIsSuccess(true);
           setIsWaitingForPin(false);
           localStorage.removeItem('active_checkout_ref');
           if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
 
-          // Silently trigger auto-login
-          setTimeout(() => loginRouter(data.voucherCode), 1000);
+          // Silently trigger auto-login after 2 seconds
+          setTimeout(() => loginRouter(data.voucherCode), 2000);
         } else if (data.status === 'failed') {
           setStatus({ success: false, message: `❌ Payment failed: ${data.message || 'Cancelled'}` });
           setIsWaitingForPin(false);
@@ -283,7 +300,33 @@ export default function PayPage() {
         boxShadow: "0 0 40px rgba(0,0,0,0.03)",
         position: "relative"
       }}>
-        <h1 style={{ textAlign: "center", marginBottom: "8px", fontWeight: "900", color: "#111827", fontSize: "38px", letterSpacing: "-1.5px" }}>
+        {isSuccess ? (
+          <div style={{ textAlign: "center", padding: "60px 20px", flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center" }}>
+            <div style={{ backgroundColor: "#ecfdf5", padding: "24px", borderRadius: "50%", marginBottom: "24px" }}>
+              <CheckCircle2 style={{ color: "#10b981", width: "80px", height: "80px" }} />
+            </div>
+            <h1 style={{ fontSize: "32px", fontWeight: "900", color: "#111827", marginBottom: "16px", letterSpacing: "-1px" }}>Payment Received!</h1>
+            <p style={{ color: "#4b5563", fontSize: "18px", marginBottom: "32px", lineHeight: "1.5" }}>
+              Successfully purchased <strong>{selectedPlan?.name}</strong>. Your internet is being activated...
+            </p>
+
+            <div style={{ backgroundColor: "#f3f4f6", padding: "20px", borderRadius: "16px", width: "100%", marginBottom: "40px" }}>
+              <p style={{ fontSize: "12px", color: "#6b7280", fontWeight: "800", textTransform: "uppercase", marginBottom: "8px" }}>Your Voucher Code</p>
+              <div style={{ fontSize: "32px", fontWeight: "900", color: "#111827", letterSpacing: "2px" }}>{purchasedVoucher}</div>
+            </div>
+
+            <div className="spinner" style={{ width: "32px", height: "32px", border: "3px solid #f3f4f6", borderTop: "3px solid #10b981" }}></div>
+            <p style={{ marginTop: "16px", fontSize: "13px", color: "#9ca3af", fontWeight: "600" }}>Redirecting to internet...</p>
+
+            {!linkLogin && (
+              <p style={{ marginTop: "40px", fontSize: "12px", color: "#6b7280", fontStyle: "italic" }}>
+                If you aren't connected in 10 seconds, please use the code above on the Wi-Fi login page.
+              </p>
+            )}
+          </div>
+        ) : (
+          <>
+            <h1 style={{ textAlign: "center", marginBottom: "8px", fontWeight: "900", color: "#111827", fontSize: "38px", letterSpacing: "-1.5px" }}>
           Starlinknet.<span style={{ color: "#4f46e5" }}>WIFI</span>
         </h1>
 
@@ -378,21 +421,32 @@ export default function PayPage() {
             <p style={{ textAlign: "center", color: "#6b7280", fontSize: "14px", marginBottom: "32px", fontWeight: "500" }}>Choose a plan and connect instantly</p>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "32px" }}>
-              {fetching ? <p style={{textAlign:"center", color:"#9ca3af"}}>Synchronizing plans...</p> : bundlePlans.map((plan) => (
-                <div key={plan.id} onClick={() => setSelectedPlan(plan)} style={{
-                  display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px", borderRadius: "14px",
-                  border: selectedPlan?.id === plan.id ? "2px solid #4f46e5" : "1px solid #f3f4f6",
-                  cursor: "pointer", backgroundColor: selectedPlan?.id === plan.id ? "#f5f3ff" : "#fff",
-                  boxShadow: selectedPlan?.id === plan.id ? "0 4px 12px rgba(79, 70, 229, 0.1)" : "none",
-                  transition: "all 0.2s"
-                }}>
-                  <div>
-                    <div style={{ fontWeight: "800", color: "#1f2937", fontSize: "16px" }}>{plan.name}</div>
-                    <div style={{ fontSize: "12px", color: "#6b7280" }}>{plan.duration || plan.detail} | High-speed</div>
-                  </div>
-                  <div style={{ fontWeight: "900", color: "#111827", fontSize: "18px" }}>{plan.price} KES</div>
+              {fetching ? (
+                <div style={{ textAlign: "center", padding: "20px" }}>
+                    <div className="spinner" style={{ width: "24px", height: "24px", border: "2px solid #f3f4f6", borderTop: "2px solid #4f46e5", margin: "0 auto 10px" }}></div>
+                    <p style={{ color: "#9ca3af", fontSize: "12px", fontWeight: "600" }}>Pulling latest offers...</p>
                 </div>
-              ))}
+              ) : bundlePlans.length > 0 ? (
+                bundlePlans.map((plan) => (
+                    <div key={plan.id} onClick={() => setSelectedPlan(plan)} style={{
+                      display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px", borderRadius: "14px",
+                      border: selectedPlan?.id === plan.id ? "2px solid #4f46e5" : "1px solid #f3f4f6",
+                      cursor: "pointer", backgroundColor: selectedPlan?.id === plan.id ? "#f5f3ff" : "#fff",
+                      boxShadow: selectedPlan?.id === plan.id ? "0 4px 12px rgba(79, 70, 229, 0.1)" : "none",
+                      transition: "all 0.2s"
+                    }}>
+                      <div>
+                        <div style={{ fontWeight: "800", color: "#1f2937", fontSize: "16px" }}>{plan.name}</div>
+                        <div style={{ fontSize: "12px", color: "#6b7280" }}>{plan.duration || plan.detail} | High-speed</div>
+                      </div>
+                      <div style={{ fontWeight: "900", color: "#111827", fontSize: "18px" }}>{plan.price} KES</div>
+                    </div>
+                  ))
+              ) : (
+                <div style={{ textAlign: "center", padding: "20px", border: "1px dashed #e5e7eb", borderRadius: "12px" }}>
+                    <p style={{ color: "#6b7280", fontSize: "13px" }}>No plans available for this site.</p>
+                </div>
+              )}
             </div>
 
             <form onSubmit={handlePayment} style={{ display: "flex", flexDirection: "column", gap: "20px" }}>

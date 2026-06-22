@@ -39,14 +39,28 @@ export async function GET(req: NextRequest) {
       })), { status: 200 });
     }
 
-    // Merge and map
-    const mappedDbOffers = dbOffers.map(offer => ({
-      ...offer,
-      max_devices: offer.maxDevices,
-      download_limit: offer.downloadLimit,
-      upload_limit: offer.uploadLimit,
-      expiry_mode: offer.expiryMode
-    }));
+    // Merge and map, adding a calculated duration string if missing
+    const mappedDbOffers = dbOffers.map(offer => {
+      let durationStr = offer.duration;
+      if (!durationStr && offer.durationMin) {
+        if (offer.durationMin >= 1440) {
+          durationStr = `${Math.floor(offer.durationMin / 1440)} Day(s)`;
+        } else if (offer.durationMin >= 60) {
+          durationStr = `${Math.floor(offer.durationMin / 60)} Hour(s)`;
+        } else {
+          durationStr = `${offer.durationMin} Mins`;
+        }
+      }
+
+      return {
+        ...offer,
+        duration: durationStr,
+        max_devices: offer.maxDevices,
+        download_limit: offer.downloadLimit,
+        upload_limit: offer.uploadLimit,
+        expiry_mode: offer.expiryMode
+      };
+    });
 
     return NextResponse.json(mappedDbOffers, { status: 200 });
   } catch (error: any) {
@@ -65,10 +79,19 @@ export async function POST(request: Request) {
       data_limit_mb, siteId, durationMin
     } = body;
 
+    // Auto-generate duration string if not provided
+    let finalDuration = duration;
+    if (!finalDuration && durationMin) {
+      const mins = parseInt(durationMin);
+      if (mins >= 1440) finalDuration = `${Math.floor(mins / 1440)} Day(s)`;
+      else if (mins >= 60) finalDuration = `${Math.floor(mins / 60)} Hour(s)`;
+      else finalDuration = `${mins} Mins`;
+    }
+
     const offer = await prisma.voucherOffer.create({
       data: {
         name,
-        duration,
+        duration: finalDuration || "1 Hour",
         durationMin: parseInt(durationMin) || 60,
         expiryMode: expiry_mode || "CONTINUOUS",
         price: parseFloat(price),
