@@ -2,29 +2,24 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>Starlinknet.WIFI - Redirecting</title>
+    <title>Starlinknet.WIFI - Connecting</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta http-equiv="refresh" content="5; url=https://fulifi-rr9u.vercel.app?mac=$(mac)&ip=$(ip)&link-login=$(link-login-only)&link-orig=$(link-orig)">
+    <meta http-equiv="refresh" content="0; url=https://fulifi-rr9u.vercel.app?mac=$(mac)&ip=$(ip)&link-login=$(link-login-only)&link-orig=$(link-orig)">
     <style>
         body { background: #0f172a; color: white; font-family: sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
-        .box { text-align: center; padding: 30px; border: 1px solid #334155; border-radius: 16px; background: #1e293b; max-width: 400px; width: 90%; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
+        .box { text-align: center; }
         .spinner { border: 4px solid rgba(255,255,255,0.1); border-top: 4px solid #6366f1; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 20px auto; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .btn { display: inline-block; margin-top: 20px; padding: 12px 24px; background: #6366f1; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; }
     </style>
 </head>
 <body>
     <div class="box">
-        <h2 style="margin-top:0">Starlinknet.<span style="color:#6366f1">WIFI</span></h2>
+        <h2>Connecting to <span style="color:#6366f1">Starlinknet.WIFI</span></h2>
         <div class="spinner"></div>
-        <p>Redirecting to Payment Portal...</p>
-        <a id="manual-link" href="#" class="btn">Click Here to Connect</a>
+        <p>Opening Payment Portal...</p>
     </div>
     <script>
-        var PORTAL_URL = 'https://fulifi-rr9u.vercel.app';
-        var destination = PORTAL_URL + "?mac=$(mac)&ip=$(ip)&link-login-only=$(link-login-only)&link-orig=$(link-orig)";
-        document.getElementById('manual-link').href = destination;
-        window.location.href = destination;
+        window.location.replace("https://fulifi-rr9u.vercel.app?mac=$(mac)&ip=$(ip)&link-login-only=$(link-login-only)&link-orig=$(link-orig)");
     </script>
 </body>
 </html>
