@@ -3,6 +3,13 @@ import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 
+// Global store for hardware status (resets on redeploy, but updated every 10s by router)
+let hardwareStatus: any = {
+  "Fiber Gateway": { alive: false, lastSeen: 0 },
+  "Core Switch": { alive: false, lastSeen: 0 },
+  "Access Point East": { alive: false, lastSeen: 0 }
+};
+
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -13,37 +20,39 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Find payments that are active but not yet provisioned on the router
+    // 1. Process Pending Vouchers
     const pendingVouchers = await prisma.payment.findMany({
-      where: {
-        siteId,
-        status: 'active',
-        provisioned: false
-      },
+      where: { siteId, status: 'active', provisioned: false },
       include: { offer: true },
       take: 5
     });
 
-    if (pendingVouchers.length === 0) return new Response("");
-
-    // Generate commands for the MikroTik to execute
     let commands = "";
     for (const p of pendingVouchers) {
       const profile = p.offer?.name || "1-Hour-Pass";
       const limit = p.offer?.durationMin ? `${p.offer.durationMin}m` : "1h";
-
-      // Add user to hotspot
       commands += `/ip hotspot user add name="${p.voucherCode}" password="${p.voucherCode}" profile="${profile}" limit-uptime=${limit} comment="Paid via Paystack";`;
-
-      // Mark as provisioned so we don't send it again
-      await prisma.payment.update({
-        where: { id: p.id },
-        data: { provisioned: true }
-      });
+      await prisma.payment.update({ where: { id: p.id }, data: { provisioned: true } });
     }
 
     return new Response(commands);
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+}
+
+// New POST method to receive Health Data from the router
+export async function POST(req: Request) {
+    try {
+        const secret = req.headers.get('x-router-secret');
+        if (secret !== process.env.STARLINKNET_WIFI_ADMIN_SECRET) return new Response("Unauthorized", { status: 401 });
+
+        const body = await req.json();
+        // Update the global status store
+        global.routerHealthData = body;
+
+        return NextResponse.json({ success: true });
+    } catch (e) {
+        return new Response("Error", { status: 500 });
+    }
 }
