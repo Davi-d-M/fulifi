@@ -109,6 +109,31 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleDeleteOffer = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this billing option?")) return;
+    const res = await fetch('/api/admin/offers', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id })
+    });
+    if (res.ok) fetchData(false);
+  };
+
+  const handleEditOffer = (offer: any) => {
+    setFormData({
+        id: offer.id,
+        name: offer.name,
+        duration: offer.duration || '',
+        durationMin: offer.durationMin?.toString() || '60',
+        price: offer.price?.toString() || '',
+        download_limit: offer.download_limit || '5M',
+        upload_limit: offer.upload_limit || '5M',
+        data_limit_mb: offer.dataLimitMB?.toString() || '',
+        max_devices: offer.max_devices?.toString() || '1',
+        expiry_mode: offer.expiry_mode || 'CONTINUOUS',
+    });
+  };
+
   const handleUpdateSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     await fetch('/api/admin/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(systemSettings) });
@@ -289,55 +314,93 @@ export default function AdminDashboard() {
         {/* MAIN CONTROLS ROW */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-1 space-y-6">
-                {/* SYSTEM SETTINGS & TETHERING BLOCK */}
+                {/* SYSTEM SETTINGS & ANNOUNCEMENTS */}
                 <form onSubmit={handleUpdateSettings} className="bg-gray-800 p-6 rounded-2xl border border-gray-700 space-y-4 shadow-xl">
-                    <h3 className="text-sm font-bold uppercase tracking-widest text-white border-b border-gray-700 pb-2 flex items-center gap-2"><Settings className="w-4 h-4 text-indigo-400" /> Control Center</h3>
-
-                    <div className="flex items-center justify-between p-3 bg-black/20 rounded-xl border border-gray-700">
-                        <div>
-                            <p className="text-[10px] font-black uppercase text-white flex items-center gap-2"><Lock className="w-3 h-3 text-red-400" /> Prevent Sharing</p>
-                            <p className="text-[8px] text-gray-500">Block users from sharing hotspot (TTL Block)</p>
-                        </div>
-                        <button
-                            type="button"
-                            onClick={() => setSystemSettings({...systemSettings, blockTethering: !systemSettings.blockTethering})}
-                            className={`w-12 h-6 rounded-full transition-colors relative ${systemSettings.blockTethering ? 'bg-red-600' : 'bg-gray-600'}`}
-                        >
-                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${systemSettings.blockTethering ? 'left-7' : 'left-1'}`} />
-                        </button>
-                    </div>
+                    <h3 className="text-sm font-bold uppercase tracking-widest text-white border-b border-gray-700 pb-2 flex items-center gap-2"><Zap className="w-4 h-4 text-amber-400" /> Announcements & Safety</h3>
 
                     <div className="space-y-2">
-                        <label className="text-[10px] font-black uppercase text-gray-500">Portal Banner</label>
+                        <label className="text-[10px] font-black uppercase text-gray-500">Live Portal Announcement</label>
                         <textarea
-                            className="w-full bg-gray-900 border border-gray-700 p-3 rounded-lg text-xs text-white outline-none focus:border-amber-500 min-h-[60px]"
-                            placeholder="Promo or maintenance text..."
+                            className="w-full bg-gray-900 border border-gray-700 p-3 rounded-lg text-xs text-white outline-none focus:border-amber-500 min-h-[80px]"
+                            placeholder="Type an announcement to show on the user billing page..."
                             value={systemSettings.bannerText}
                             onChange={e => setSystemSettings({...systemSettings, bannerText: e.target.value})}
                         />
                         <div className="flex gap-2">
                             <select className="bg-gray-900 border border-gray-700 p-2 rounded-lg text-xs text-white flex-1" value={systemSettings.bannerType} onChange={e => setSystemSettings({...systemSettings, bannerType: e.target.value})}>
-                                <option value="info">Info</option>
-                                <option value="warning">Warning</option>
-                                <option value="maintenance">Danger</option>
+                                <option value="info">💡 Information (Purple)</option>
+                                <option value="warning">⚠️ Warning (Amber)</option>
+                                <option value="maintenance">🚨 Emergency/Maintenance (Red)</option>
                             </select>
-                            <button type="submit" className="bg-indigo-600 hover:bg-indigo-500 px-4 rounded-lg font-black text-[10px] uppercase">Save</button>
+                            {systemSettings.bannerText && (
+                                <button type="button" onClick={() => { setSystemSettings({...systemSettings, bannerText: ''}); }} className="bg-gray-700 hover:bg-gray-600 px-3 rounded-lg font-black text-[10px] uppercase">Clear</button>
+                            )}
+                            <button type="submit" className="bg-indigo-600 hover:bg-indigo-500 px-4 rounded-lg font-black text-[10px] uppercase">Publish</button>
+                        </div>
+                    </div>
+
+                    <div className="pt-4 border-t border-gray-700">
+                        <div className="flex items-center justify-between p-3 bg-black/20 rounded-xl border border-gray-700">
+                            <div>
+                                <p className="text-[10px] font-black uppercase text-white flex items-center gap-2"><Lock className="w-3 h-3 text-red-400" /> Block Tethering</p>
+                                <p className="text-[8px] text-gray-500">Prevents users from sharing their connection via hotspot.</p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setSystemSettings({...systemSettings, blockTethering: !systemSettings.blockTethering})}
+                                className={`w-12 h-6 rounded-full transition-colors relative ${systemSettings.blockTethering ? 'bg-red-600' : 'bg-gray-600'}`}
+                            >
+                                <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${systemSettings.blockTethering ? 'left-7' : 'left-1'}`} />
+                            </button>
                         </div>
                     </div>
                 </form>
 
                 {/* PACKAGE CONFIG */}
                 <form onSubmit={handleCreateOffer} className="bg-gray-800 p-6 rounded-2xl border border-gray-700 space-y-4 shadow-xl">
-                    <h3 className="text-sm font-bold uppercase tracking-widest text-white border-b border-gray-700 pb-2">Voucher Config</h3>
+                    <h3 className="text-sm font-bold uppercase tracking-widest text-white border-b border-gray-700 pb-2">{formData.id ? 'Edit' : 'Create'} Billing Option</h3>
                     <div className="space-y-3">
-                        <input type="text" placeholder="Name (e.g. 1GB Fast)" className="w-full bg-gray-900 border border-gray-700 p-2.5 rounded-lg text-xs text-white" value={formData.name} onChange={e=>setFormData({...formData, name:e.target.value})} required />
+                        <input type="text" placeholder="Plan Name (e.g. 1hr Super)" className="w-full bg-gray-900 border border-gray-700 p-2.5 rounded-lg text-xs text-white" value={formData.name} onChange={e=>setFormData({...formData, name:e.target.value})} required />
                         <div className="grid grid-cols-2 gap-3">
                             <input type="number" placeholder="Price (KES)" className="w-full bg-gray-900 border border-gray-700 p-2.5 rounded-lg text-xs text-white" value={formData.price} onChange={e=>setFormData({...formData, price:e.target.value})} required />
-                            <input type="number" placeholder="Minutes" className="w-full bg-gray-900 border border-gray-700 p-2.5 rounded-lg text-xs text-white" value={formData.durationMin} onChange={e=>setFormData({...formData, durationMin:e.target.value})} required />
+                            <input type="number" placeholder="Mins" title="Duration in Minutes" className="w-full bg-gray-900 border border-gray-700 p-2.5 rounded-lg text-xs text-white" value={formData.durationMin} onChange={e=>setFormData({...formData, durationMin:e.target.value})} required />
                         </div>
-                        <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-500 p-3 rounded-lg font-black text-xs uppercase shadow-lg transition-all">Create Profile</button>
+                        <div className="grid grid-cols-2 gap-3">
+                            <input type="text" placeholder="Download (e.g. 5M)" className="w-full bg-gray-900 border border-gray-700 p-2.5 rounded-lg text-xs text-white" value={formData.download_limit} onChange={e=>setFormData({...formData, download_limit:e.target.value})} />
+                            <input type="text" placeholder="Upload (e.g. 2M)" className="w-full bg-gray-900 border border-gray-700 p-2.5 rounded-lg text-xs text-white" value={formData.upload_limit} onChange={e=>setFormData({...formData, upload_limit:e.target.value})} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                             <input type="number" placeholder="Data MB (Optional)" className="w-full bg-gray-900 border border-gray-700 p-2.5 rounded-lg text-xs text-white" value={formData.data_limit_mb} onChange={e=>setFormData({...formData, data_limit_mb:e.target.value})} />
+                             <select className="w-full bg-gray-900 border border-gray-700 p-2.5 rounded-lg text-xs text-white" value={formData.expiry_mode} onChange={e=>setFormData({...formData, expiry_mode:e.target.value})}>
+                                <option value="CONTINUOUS">Continuous</option>
+                                <option value="ACTIVE_ONLY">Active Time Only</option>
+                             </select>
+                        </div>
+                        <div className="flex gap-2">
+                             <button type="submit" className="flex-1 bg-indigo-600 hover:bg-indigo-500 p-3 rounded-lg font-black text-xs uppercase shadow-lg transition-all">{formData.id ? 'Update' : 'Create'}</button>
+                             {formData.id && <button type="button" onClick={() => setFormData({id:'', name:'', duration:'', durationMin:'60', price:'', download_limit:'5M', upload_limit:'5M', data_limit_mb: '', max_devices:'1', expiry_mode:'CONTINUOUS'})} className="bg-gray-700 p-3 rounded-lg font-black text-xs uppercase">Cancel</button>}
+                        </div>
                     </div>
                 </form>
+
+                {/* EXISTING OFFERS LIST */}
+                <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700 space-y-4 shadow-xl">
+                    <h3 className="text-sm font-bold uppercase tracking-widest text-white border-b border-gray-700 pb-2">Current Plans</h3>
+                    <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
+                        {offers.map((offer) => (
+                            <div key={offer.id} className="flex justify-between items-center p-3 bg-gray-900/50 rounded-xl border border-gray-700 group">
+                                <div>
+                                    <p className="text-xs font-bold text-white">{offer.name}</p>
+                                    <p className="text-[10px] text-gray-500">{offer.price} KES | {offer.durationMin} mins | {offer.download_limit}/{offer.upload_limit}</p>
+                                </div>
+                                <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button onClick={() => handleEditOffer(offer)} className="text-indigo-400 p-1 hover:bg-gray-800 rounded"><Settings className="w-4 h-4" /></button>
+                                    <button onClick={() => handleDeleteOffer(offer.id)} className="text-red-400 p-1 hover:bg-gray-800 rounded"><XCircle className="w-4 h-4" /></button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
 
                 {/* MANUAL RECONCILE */}
                 <div className="bg-indigo-900/10 p-5 rounded-xl border border-indigo-500/20 space-y-3">

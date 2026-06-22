@@ -45,6 +45,14 @@ export default function PayPage() {
     setLinkLogin(params.get('link-login') || params.get('link-login-only') || "");
     setLinkOrig(params.get('link-orig') || "");
 
+    // Check if MAC is missing - Critical for Hotspot
+    if (!urlMac && !params.get('reference')) {
+        setStatus({
+            success: false,
+            message: "⚠️ System could not identify your device. Please DISCONNECT from Wi-Fi and RECONNECT to see the billing page properly."
+        });
+    }
+
     // 2. Local Storage Session Backup (Resiliency)
     const savedRef = localStorage.getItem('active_checkout_ref');
     const savedMac = localStorage.getItem('last_mac');
@@ -278,6 +286,24 @@ export default function PayPage() {
         <h1 style={{ textAlign: "center", marginBottom: "8px", fontWeight: "900", color: "#111827", fontSize: "38px", letterSpacing: "-1.5px" }}>
           Starlinknet.<span style={{ color: "#4f46e5" }}>WIFI</span>
         </h1>
+
+        {!mac && !isWaitingForPin && !status?.success && (
+            <div style={{
+                backgroundColor: "#fff7ed",
+                border: "1px solid #ffedd5",
+                padding: "16px",
+                borderRadius: "12px",
+                marginBottom: "24px",
+                textAlign: "center"
+            }}>
+                <ShieldAlert style={{ color: "#f97316", width: "24px", height: "24px", margin: "0 auto 8px" }} />
+                <p style={{ fontSize: "12px", color: "#9a3412", fontWeight: "700", lineHeight: "1.4" }}>
+                    Device ID missing. If you pay now, we won't know which phone to activate.
+                    <br/>
+                    <span style={{ textDecoration: "underline" }}>Please turn your Wi-Fi OFF and ON again.</span>
+                </p>
+            </div>
+        )}
 
         {systemBanner && (
           <div style={{
