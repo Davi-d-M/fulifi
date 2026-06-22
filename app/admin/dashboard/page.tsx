@@ -11,15 +11,8 @@ import {
   LogOut,
   Settings,
   Database,
-  Smartphone,
-  CheckCircle2,
   XCircle,
-  Clock,
-  ShieldAlert,
-  Download,
-  Shield,
-  Zap,
-  Lock
+  Zap
 } from 'lucide-react';
 
 export default function AdminDashboard() {
@@ -136,10 +129,10 @@ export default function AdminDashboard() {
       duration: offer.duration || '',
       durationMin: offer.durationMin?.toString() || '60',
       price: offer.price?.toString() || '',
-      download_limit: offer.download_limit || '5M',
-      upload_limit: offer.upload_limit || '5M',
+      download_limit: offer.downloadLimit || '5M',
+      upload_limit: offer.uploadLimit || '5M',
       data_limit_mb: offer.dataLimitMB?.toString() || '',
-      max_devices: offer.maxDevices?.toString() || '1',
+      max_devices: (offer.maxDevices || 1).toString(),
       expiry_mode: offer.expiryMode || 'CONTINUOUS',
     });
   };
@@ -161,26 +154,6 @@ export default function AdminDashboard() {
         alert("Announcement Published!");
       }
     } catch (err) { alert("Error updating settings"); }
-  };
-
-  const handleReconcile = async () => {
-    const ref = prompt("Enter Paystack Transaction Reference:");
-    if (!ref) return;
-    setLoading(true);
-    await fetch('/api/admin/reconcile', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reference: ref, siteId: selectedSite })
-    });
-    setLoading(false);
-    fetchData(false);
-  };
-
-  const handleCreateBackup = async () => {
-      setLoading(true);
-      await fetch('/api/admin/backup', { method: 'POST', body: JSON.stringify({ siteId: selectedSite }) });
-      setLoading(false);
-      fetchData(false);
   };
 
   if (loading) return (
@@ -211,7 +184,6 @@ export default function AdminDashboard() {
       </header>
 
       <div className="space-y-8">
-        {/* STATS STRIP */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="bg-gray-800 p-4 rounded-xl border border-gray-700 flex items-center gap-4">
             <div className={`p-2 rounded-lg ${routerInfo.isOnline ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}><Router className="w-5 h-5" /></div>
@@ -235,22 +207,19 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* REVENUE & USERS STRIP */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-gradient-to-br from-indigo-600 to-indigo-800 p-6 rounded-2xl border border-white/5 relative overflow-hidden group">
-            <TrendingUp className="absolute -right-4 -bottom-4 w-32 h-32 opacity-10" />
+          <div className="bg-gradient-to-br from-indigo-600 to-indigo-800 p-6 rounded-2xl border border-white/5">
             <p className="text-[10px] font-black uppercase tracking-widest opacity-70">Total Revenue</p>
             <h3 className="text-4xl font-black mt-2">KSh {analytics?.totalRevenue || metrics?.totalRevenue || 0}</h3>
           </div>
-          <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700 relative overflow-hidden group">
-            <Users className="absolute -right-4 -bottom-4 w-32 h-32 opacity-5" />
+          <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700">
             <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Active Leases</p>
             <h3 className="text-4xl font-black mt-2 text-white">{(activeSessions || []).length}</h3>
           </div>
           <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700">
             <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">System Link</p>
             <div className="mt-3 flex items-center gap-3">
-              <span className={`h-3 w-3 rounded-full ${routerInfo.isOnline ? 'bg-emerald-500' : 'bg-red-500 animate-pulse'} shadow-[0_0_10px_rgba(16,185,129,0.5)]`}></span>
+              <span className={`h-3 w-3 rounded-full ${routerInfo.isOnline ? 'bg-emerald-500' : 'bg-red-500 animate-pulse'}`}></span>
               <span className={`text-xl font-black ${routerInfo.isOnline ? 'text-emerald-400' : 'text-red-400'} uppercase`}>{routerInfo.isOnline ? 'SYNCED' : 'DISCONNECTED'}</span>
             </div>
           </div>
@@ -258,7 +227,6 @@ export default function AdminDashboard() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-1 space-y-6">
-                {/* ANNOUNCEMENTS */}
                 <form onSubmit={handleUpdateSettings} className="bg-gray-800 p-6 rounded-2xl border border-gray-700 space-y-4 shadow-xl">
                     <h3 className="text-sm font-bold uppercase tracking-widest text-white border-b border-gray-700 pb-2 flex items-center gap-2"><Zap className="w-4 h-4 text-amber-400" /> Announcements</h3>
                     <textarea
@@ -277,7 +245,6 @@ export default function AdminDashboard() {
                     </div>
                 </form>
 
-                {/* CREATE/EDIT OFFER */}
                 <form onSubmit={handleCreateOffer} className="bg-gray-800 p-6 rounded-2xl border border-gray-700 space-y-4 shadow-xl">
                     <h3 className="text-sm font-bold uppercase tracking-widest text-white border-b border-gray-700 pb-2">{formData.id ? 'Edit Plan' : 'Add Plan'}</h3>
                     <input type="text" placeholder="Name" className="w-full bg-gray-900 border border-gray-700 p-2 rounded-lg text-xs text-white" value={formData.name} onChange={e=>setFormData({...formData, name:e.target.value})} required />
@@ -295,7 +262,6 @@ export default function AdminDashboard() {
             </div>
 
             <div className="lg:col-span-2 space-y-6">
-                {/* OFFERS LIST */}
                 <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700 shadow-xl">
                     <h3 className="text-sm font-bold uppercase tracking-widest text-white mb-4">Billing Options</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -314,7 +280,6 @@ export default function AdminDashboard() {
                     </div>
                 </div>
 
-                {/* SESSIONS */}
                 <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700 shadow-xl">
                     <h3 className="text-sm font-bold uppercase tracking-widest text-white mb-4">Live Hardware Leases</h3>
                     <div className="overflow-x-auto">
@@ -323,8 +288,8 @@ export default function AdminDashboard() {
                                 <tr><th className="p-4">User</th><th className="p-4">IP</th><th className="p-4">Uptime</th><th className="p-4"></th></tr>
                             </thead>
                             <tbody className="text-xs">
-                                {activeSessions.map((s:any) => (
-                                    <tr key={s.id} className="border-b border-gray-700/50">
+                                {activeSessions.map((s:any, idx: number) => (
+                                    <tr key={idx} className="border-b border-gray-700/50">
                                         <td className="p-4 font-mono text-indigo-400">{s.user || s.voucherCode}</td>
                                         <td className="p-4 text-gray-400">{s.address || s.ipAddress}</td>
                                         <td className="p-4 text-emerald-400 font-bold">{s.uptime}</td>
