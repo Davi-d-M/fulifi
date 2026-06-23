@@ -35,6 +35,19 @@ export async function POST(request: Request) {
     // 1. Ensure the package exists in the database
     let offer = await p.voucherOffer.findUnique({ where: { id: package_id } });
 
+    // CRITICAL: Ensure the site exists to satisfy foreign key constraints
+    const site = await p.site.findUnique({ where: { id: siteId } });
+    if (!site) {
+      console.log(`[Bulk] Creating missing site: ${siteId}`);
+      await p.site.create({
+        data: {
+          id: siteId,
+          name: siteId === 'default-site' ? 'Main Operations' : siteId,
+          location: 'Auto-Generated'
+        }
+      });
+    }
+
     if (!offer) {
       const staticPkg = WIFI_BILLING_CATALOG[package_id];
       if (staticPkg) {
@@ -91,33 +104,25 @@ export async function POST(request: Request) {
         throw new Error("Could not generate unique codes. Please try again.");
     }
 
-    const vouchersData = uniqueCodes.map(code => ({
-      voucherCode: code,
-      offerId: package_id,
-      isUsed: false,
-      siteId
-    }));
-
-    // Perform batch insert - createMany is supported, but skipDuplicates is NOT on SQLite
-    await p.bulkVoucher.createMany({
-      data: vouchersData,
-    });
-
-    // 3. Retrieve the successfully created vouchers with their relations
-    // We fetch based on the codes we just generated
-    const createdVouchers = await p.bulkVoucher.findMany({
-      where: {
-        voucherCode: { in: Array.from(codesToInsert) }
-      },
-      include: {
-        offer: true
-      },
-      orderBy: {
-        createdAt: 'desc'
+    // Perform batch insert - use a loop for better error handling on SQLite
+    const createdResults = [];
+    for (const data of vouchersData) {
+      try {
+        const v = await p.bulkVoucher.create({
+          data,
+          include: { offer: true }
+        });
+        createdResults.push(v);
+      } catch (e: any) {
+        console.warn(`[Bulk] Skipping code ${data.voucherCode} due to error:`, e.message);
       }
-    });
+    }
 
-    const formattedData = createdVouchers.map((v: any) => ({
+    if (createdResults.length === 0) {
+        throw new Error("Failed to create any vouchers. Check database constraints.");
+    }
+
+    const formattedData = createdResults.map((v: any) => ({
       id: v.id,
       code: v.voucherCode,
       package_id: v.offerId,
@@ -134,10 +139,20 @@ export async function POST(request: Request) {
     });
 
   } catch (error: any) {
-    console.error("[Bulk] Fatal error during generation:", error.message);
+    console.error("[Bulk] Fatal error during generation:", error);
+
+    // Provide more specific error for common issues
+    let errorMsg = "An error occurred while generating vouchers. Please try a smaller batch size.";
+    if (error.message?.includes("foreign key constraint")) {
+      errorMsg = "Database Sync Error: Please ensure all sites and packages are correctly registered.";
+    } else if (error.code === "P2002") {
+      errorMsg = "Collision Error: Some codes already exist. Please try again.";
+    }
+
     return NextResponse.json({
-      error: "An error occurred while generating vouchers. Please try a smaller batch size.",
-      details: error.message
+      error: errorMsg,
+      details: error.message,
+      code: error.code
     }, { status: 500 });
   }
 }

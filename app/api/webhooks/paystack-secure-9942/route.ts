@@ -102,14 +102,19 @@ async function processSuccessfulPayment(paymentData: any) {
     });
 
     // 3. MikroTik Provisioning
+    if (!macAddress) {
+      console.warn(`[Paystack Webhook] WARNING: No MAC address found for reference ${reference}. User will need to enter code manually.`);
+    }
+
+    console.log(`[Paystack] Provisioning ${voucherCode} (${durationMin}m, ${speedLimit}, ${dataLimitMB || 'Unlimited'}MB) on site ${siteId}`);
     const routerResult = await createMikrotikVoucher(
       voucherCode,
       packageId,
-      durationMin + 3,
+      durationMin + 5, // Increased grace period to 5 mins
       expiryMode,
       macAddress,
       speedLimit,
-      dataLimitMB,
+      dataLimitMB || undefined,
       undefined, undefined, undefined,
       siteId
     );
@@ -120,7 +125,7 @@ async function processSuccessfulPayment(paymentData: any) {
       data: {
         provisioned: routerResult.success,
         resultDesc: routerResult.success
-          ? `Successfully provisioned ${packageName} (Inc. 3min grace)`
+          ? `Successfully provisioned ${packageName} (Inc. 5min grace)`
           : `ROUTER_OFFLINE: ${routerResult.error}`
       }
     });
@@ -136,7 +141,7 @@ async function processSuccessfulPayment(paymentData: any) {
     // 5. Instant Internet Activation (If possible)
     if (routerResult.success && macAddress && ipAddress) {
       console.log(`[Paystack] Attempting instant activation for MAC: ${macAddress}, IP: ${ipAddress}`);
-      const activationResult = await activateHotspotSession(macAddress, ipAddress, voucherCode);
+      const activationResult = await activateHotspotSession(macAddress, ipAddress, voucherCode, siteId);
       if (!activationResult.success) {
         console.warn(`[Paystack] Instant activation failed: ${activationResult.message}`);
       } else {

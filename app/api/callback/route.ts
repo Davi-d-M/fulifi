@@ -84,11 +84,11 @@ export async function POST(req: NextRequest) {
       ]);
 
       // 3. MikroTik Provisioning (Live Sync)
-      console.log(`[MikroTik] Provisioning ${voucherCode} (${durationMin}m) on site ${payment.siteId}`);
+      console.log(`[MikroTik] Provisioning ${voucherCode} (${durationMin}m, ${speedLimit}, ${payment.offer?.dataLimitMB || 'Unlimited'}MB) on site ${payment.siteId}`);
       const routerResult = await createMikrotikVoucher(
         voucherCode,
         payment.offerId || '1hr',
-        durationMin + 3, // 3 min grace period
+        durationMin + 5, // 5 min grace period
         expiryMode,
         undefined, // We'll rely on the first login to bind MAC
         speedLimit,
@@ -96,6 +96,12 @@ export async function POST(req: NextRequest) {
         undefined, undefined, undefined,
         payment.siteId
       );
+
+      // 4. Force immediate session activation if MAC is available (Optional but helpful)
+      if (payment.macAddress) {
+        console.log(`[MikroTik] Auto-activating session for MAC: ${payment.macAddress}`);
+        await activateHotspotSession(payment.macAddress, payment.ipAddress || '0.0.0.0', voucherCode, payment.siteId).catch(() => {});
+      }
 
       // 4. Update Provisioning Status
       await prisma.payment.update({

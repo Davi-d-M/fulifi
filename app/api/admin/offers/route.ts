@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
       downloadLimit: pkg.speedLimit,
       uploadLimit: "Unlimited",
       speedLimit: pkg.speedLimit,
-      isSystem: true,
+      isSystem: false, // Unlocked
     }));
 
     // If DB is empty or failed, return static catalog immediately
@@ -58,11 +58,24 @@ export async function GET(req: NextRequest) {
         max_devices: offer.maxDevices,
         download_limit: offer.downloadLimit,
         upload_limit: offer.uploadLimit,
-        expiry_mode: offer.expiryMode
+        expiry_mode: offer.expiryMode,
+        isSystem: false // Database offers are always editable
       };
     });
 
-    return NextResponse.json(mappedDbOffers, { status: 200 });
+    // Also include static offers if they aren't already in the DB by name
+    const existingNames = new Set(dbOffers.map(o => o.name.toLowerCase()));
+    const additionalOffers = staticOffers
+      .filter(o => !existingNames.has(o.name.toLowerCase()))
+      .map(o => ({
+        ...o,
+        max_devices: o.maxDevices,
+        download_limit: o.downloadLimit,
+        upload_limit: o.uploadLimit,
+        expiry_mode: "CONTINUOUS"
+      }));
+
+    return NextResponse.json([...mappedDbOffers, ...additionalOffers], { status: 200 });
   } catch (error: any) {
     console.error("Critical Offers Error:", error.message);
     // Absolute final fallback to ensure JSON is always returned
@@ -74,10 +87,13 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const {
-      name, duration, price, max_devices,
-      download_limit, upload_limit, expiry_mode,
-      data_limit_mb, siteId, durationMin
+      name, duration, price, maxDevices,
+      downloadLimit, uploadLimit, expiryMode,
+      dataLimitMB, siteId, durationMin
     } = body;
+
+    // Support camelCase from UI but map to DB if needed
+    const finalDataLimit = dataLimitMB ? parseInt(dataLimitMB) : (body.data_limit_mb ? parseInt(body.data_limit_mb) : null);
 
     // Auto-generate duration string if not provided
     let finalDuration = duration;
@@ -93,13 +109,13 @@ export async function POST(request: Request) {
         name,
         duration: finalDuration || "1 Hour",
         durationMin: parseInt(durationMin) || 60,
-        expiryMode: expiry_mode || "CONTINUOUS",
+        expiryMode: expiryMode || body.expiry_mode || "CONTINUOUS",
         price: parseFloat(price),
-        maxDevices: parseInt(max_devices) || 1,
-        downloadLimit: download_limit || "5M",
-        uploadLimit: upload_limit || "5M",
-        dataLimitMB: data_limit_mb ? parseInt(data_limit_mb) : null,
-        speedLimit: `${upload_limit || "5M"}/${download_limit || "5M"}`,
+        maxDevices: parseInt(maxDevices) || parseInt(body.max_devices) || 1,
+        downloadLimit: downloadLimit || body.download_limit || "5M",
+        uploadLimit: uploadLimit || body.upload_limit || "5M",
+        dataLimitMB: finalDataLimit,
+        speedLimit: `${uploadLimit || body.upload_limit || "5M"}/${downloadLimit || body.download_limit || "5M"}`,
         siteId: siteId || 'default-site'
       }
     });
@@ -121,19 +137,21 @@ export async function PUT(request: Request) {
 
     if (!id) return NextResponse.json({ error: "Missing ID" }, { status: 400 });
 
+    const finalDataLimit = data_limit_mb ? parseInt(data_limit_mb) : (body.dataLimitMB ? parseInt(body.dataLimitMB) : null);
+
     const offer = await prisma.voucherOffer.update({
       where: { id },
       data: {
         name,
         duration,
         durationMin: durationMin ? parseInt(durationMin) : undefined,
-        expiryMode: expiry_mode,
+        expiryMode: expiry_mode || body.expiryMode || "CONTINUOUS",
         price: parseFloat(price),
-        maxDevices: parseInt(max_devices),
-        downloadLimit: download_limit,
-        uploadLimit: upload_limit,
-        dataLimitMB: data_limit_mb ? parseInt(data_limit_mb) : null,
-        speedLimit: `${upload_limit}/${download_limit}`,
+        maxDevices: parseInt(max_devices) || parseInt(body.maxDevices) || 1,
+        downloadLimit: download_limit || body.downloadLimit || "5M",
+        uploadLimit: upload_limit || body.uploadLimit || "5M",
+        dataLimitMB: finalDataLimit,
+        speedLimit: `${upload_limit || body.uploadLimit || "5M"}/${download_limit || body.downloadLimit || "5M"}`,
       }
     });
 

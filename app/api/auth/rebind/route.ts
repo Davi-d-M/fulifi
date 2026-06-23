@@ -7,7 +7,10 @@ export async function POST(req: NextRequest) {
     const { voucherCode, phoneNumber, mac, ip, siteId } = await req.json();
 
     if ((!voucherCode && !phoneNumber) || !mac) {
-      return NextResponse.json({ error: "Missing identity or hardware address" }, { status: 400 });
+      return NextResponse.json({
+        error: "Missing device identity",
+        tip: "The system could not identify your phone's hardware address. Please reconnect to the Wi-Fi."
+      }, { status: 400 });
     }
 
     // 1. Find the existing active session/payment

@@ -1,25 +1,79 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>Starlinknet.WIFI - Connecting</title>
+    <title>Fulifi.WIFI - Connecting</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta http-equiv="refresh" content="0; url=https://fulifi-rr9u.vercel.app?mac=$(mac)&ip=$(ip)&siteId=$(identity)&link-login=$(link-login-only)&link-orig=$(link-orig)">
+    <!-- Redirection to the billing portal -->
+    <!-- REPLACE THE URL BELOW WITH YOUR ACTUAL PRODUCTION URL IF DIFFERENT -->
+    <meta http-equiv="refresh" content="0; url=https://oil-cinnamon-starfish.ngrok-free.dev?mac=$(mac)&ip=$(ip)&siteId=$(identity)&link-login=$(link-login-only)&link-orig=$(link-orig)">
     <style>
-        body { background: #0f172a; color: white; font-family: sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
-        .box { text-align: center; }
-        .spinner { border: 4px solid rgba(255,255,255,0.1); border-top: 4px solid #6366f1; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 20px auto; }
+        body {
+            background: #0a0c10;
+            color: white;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        .box {
+            text-align: center;
+            padding: 30px;
+            background: #11141b;
+            border-radius: 24px;
+            border: 1px solid #1f2937;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+            max-width: 320px;
+            width: 90%;
+        }
+        h2 { font-size: 24px; font-weight: 900; margin-bottom: 8px; text-transform: uppercase; letter-spacing: -1px; }
+        .spinner {
+            border: 4px solid rgba(99, 102, 241, 0.1);
+            border-top: 4px solid #6366f1;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 30px auto;
+        }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        p { color: #9ca3af; font-size: 14px; line-height: 1.5; margin-bottom: 24px; }
+        .btn {
+            display: inline-block;
+            background: #6366f1;
+            color: white;
+            text-decoration: none;
+            padding: 14px 24px;
+            border-radius: 12px;
+            font-weight: 800;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: transform 0.2s;
+        }
+        .btn:active { transform: scale(0.95); }
     </style>
 </head>
 <body>
     <div class="box">
-        <h2>Connecting to <span style="color:#6366f1">Starlinknet.WIFI</span></h2>
+        <h2>FULIFI.<span style="color:#6366f1">WIFI</span></h2>
         <div class="spinner"></div>
-        <p>Opening Payment Portal...</p>
+        <p>Syncing your device with the billing gateway. One moment...</p>
+
+        <a href="https://oil-cinnamon-starfish.ngrok-free.dev?mac=$(mac)&ip=$(ip)&siteId=$(identity)&link-login=$(link-login-only)&link-orig=$(link-orig)" class="btn">
+            Open Portal Manually
+        </a>
     </div>
+
     <script>
-        window.location.replace("https://fulifi-rr9u.vercel.app?mac=$(mac)&ip=$(ip)&siteId=$(identity)&link-login-only=$(link-login-only)&link-orig=$(link-orig)");
+        // Automatic redirection script with short delay to allow router to process
+        const portalUrl = "https://oil-cinnamon-starfish.ngrok-free.dev?mac=$(mac)&ip=$(ip)&siteId=$(identity)&link-login=$(link-login-only)&link-orig=$(link-orig)";
+
+        setTimeout(function() {
+            window.location.replace(portalUrl);
+        }, 1500);
     </script>
 </body>
 </html>

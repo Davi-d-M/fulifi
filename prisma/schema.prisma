@@ -1,7 +1,6 @@
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider = "sqlite"
+  url      = "file:./dev.db"
 }
 
 generator client {
@@ -127,6 +126,66 @@ model Site {
   BulkVoucher   BulkVoucher[]
   Backups      RouterBackup[]
   SecurityAlert SecurityAlert[]
+  Devices      NetworkDevice[]
+  PerformanceLogs PerformanceLog[]
+  Audits       BalanceAudit[]
+  Reports      OperationalReport[]
+}
+
+model NetworkDevice {
+  id            String    @id @default(cuid())
+  name          String    // e.g., "Main Switch", "Fiber Modem"
+  ipAddress     String
+  type          String    // "ROUTER", "SWITCH", "AP", "MODEM"
+  status        String    @default("ONLINE") // "ONLINE", "OFFLINE"
+  lastPing      DateTime?
+  siteId        String
+  site          Site      @relation(fields: [siteId], references: [id])
+  smartPlugId   String?   // For remote reboot integration (Sonoff/Tuya)
+  createdAt     DateTime  @default(now())
+}
+
+model PerformanceLog {
+  id            String   @id @default(cuid())
+  siteId        String
+  site          Site     @relation(fields: [siteId], references: [id])
+  downloadSpeed Float    // In Mbps
+  uploadSpeed   Float    // In Mbps
+  latency       Int      // In ms
+  provider      String   // e.g., "Starlink", "Safaricom"
+  timestamp     DateTime @default(now())
+}
+
+model BalanceAudit {
+  id                String   @id @default(cuid())
+  siteId            String
+  site              Site     @relation(fields: [siteId], references: [id])
+  expectedRevenue   Float    // Based on vouchers created
+  actualRevenue     Float    // Based on payment gateway settlements
+  discrepancy       Float
+  status            String   // "CLEAN", "FLAGGED"
+  flaggedReason     String?
+  auditDate         DateTime @default(now())
+}
+
+model OperationalReport {
+  id            String   @id @default(cuid())
+  siteId        String
+  site          Site     @relation(fields: [siteId], references: [id])
+  reportType    String   // "DAILY_SUMMARY", "TAX_REPORT"
+  content       String   // JSON or serialized summary
+  sentTo        String   // Email or WhatsApp number
+  createdAt     DateTime @default(now())
+}
+
+model SupportMessage {
+  id            String   @id @default(cuid())
+  phoneNumber   String
+  voucherCode   String?
+  message       String
+  direction     String   // "INBOUND", "OUTBOUND"
+  channel       String   // "WHATSAPP", "SMS"
+  createdAt     DateTime @default(now())
 }
 
 model RouterBackup {
@@ -164,4 +223,13 @@ model SpeedTest {
   ping      Float    // in ms
   isp       String?
   createdAt DateTime @default(now())
+}
+
+model Referral {
+  id               String   @id @default(cuid())
+  referrerVoucher  String
+  referredPhone    String
+  rewardMinutes    Int      @default(30)
+  isClaimed        Boolean  @default(false)
+  createdAt        DateTime @default(now())
 }
