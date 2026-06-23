@@ -59,9 +59,31 @@ export default function PayPage() {
         });
     }
 
-    // 2. Local Storage Session Backup (Resiliency)
+    // 2. Local Storage Session Backup (Resiliency) & Auto-Reconnect
     const savedRef = localStorage.getItem('active_checkout_ref');
     const savedMac = localStorage.getItem('last_mac');
+
+    const triggerAutoReconnect = async (currentMac: string) => {
+      try {
+        console.log("[Auto-Reconnect] Checking for active session for MAC:", currentMac);
+        const res = await fetch(`/api/auth/rebind`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mac: currentMac, ip: urlIp, siteId: urlSiteId }),
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          console.log("[Auto-Reconnect] Session found, logging in...");
+          loginRouter(data.voucherCode);
+        }
+      } catch (err) {
+        console.error("[Auto-Reconnect] Failed:", err);
+      }
+    };
+
+    if (urlMac) {
+      triggerAutoReconnect(urlMac);
+    }
 
     if (savedRef && (!urlMac || savedMac === urlMac)) {
       setActiveReference(savedRef);
@@ -348,7 +370,7 @@ export default function PayPage() {
 
             <div style={{ width: "100%", marginBottom: "40px" }}>
                 {!showRefer ? (
-                    <button onClick={() => setShowRefer(true)} style={{ width: "100%", backgroundColor: "#f5f3ff", color: "#4f46e5", padding: "12px", borderRadius: "12px", border: "1px solid #ddd6fe", fontWeight: "800", fontSize: "12px", cursor: "pointer" }}>
+                    <button onClick={() => setShowRefer(true)} style={{ width: "100%", backgroundColor: "#f5f3ff", color: "#4f46e5", padding: "14px", borderRadius: "12px", border: "1px solid #ddd6fe", fontWeight: "800", fontSize: "14px", cursor: "pointer", transition: "all 0.2s" }} className="hover-scale">
                         🎁 Refer a friend & get 30 mins FREE
                     </button>
                 ) : (
@@ -356,7 +378,7 @@ export default function PayPage() {
                         <p style={{ fontSize: "11px", color: "#4b5563", fontWeight: "700", marginBottom: "12px" }}>Enter friend's phone number to get 30 mins added instantly!</p>
                         <div style={{ display: "flex", gap: "8px" }}>
                             <input type="tel" placeholder="07XXXXXXXX" value={referPhone} onChange={e => setReferPhone(e.target.value)} style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "13px" }} required />
-                            <button type="submit" style={{ backgroundColor: "#4f46e5", color: "white", padding: "10px 15px", borderRadius: "8px", border: "none", fontWeight: "800", fontSize: "12px" }}>Get Gift</button>
+                            <button type="submit" style={{ backgroundColor: "#4f46e5", color: "white", padding: "12px 20px", borderRadius: "8px", border: "none", fontWeight: "800", fontSize: "14px", cursor: "pointer", transition: "all 0.2s" }} className="hover-scale">Get Gift</button>
                         </div>
                     </form>
                 )}
@@ -395,7 +417,7 @@ export default function PayPage() {
                 <div style={{ backgroundColor: "#f5f3ff", padding: "20px", borderRadius: "16px", margin: "24px 0" }}>
                   <div style={{ fontSize: "42px", fontWeight: "900", color: "#4f46e5" }}>00:{countdown.toString().padStart(2, '0')}</div>
                 </div>
-                <button onClick={handleManualCheck} style={{ width: "100%", backgroundColor: "#111827", color: "white", padding: "16px", borderRadius: "12px", fontWeight: "800", cursor: "pointer", marginBottom: "12px" }}>I already entered my PIN</button>
+                <button onClick={handleManualCheck} style={{ width: "100%", backgroundColor: "#111827", color: "white", padding: "18px", borderRadius: "12px", fontWeight: "800", cursor: "pointer", marginBottom: "12px", transition: "all 0.2s" }} className="hover-scale">I already entered my PIN</button>
                 <button
                   onClick={() => {
                     localStorage.removeItem('active_checkout_ref');
@@ -403,7 +425,8 @@ export default function PayPage() {
                     setActiveReference(null);
                     window.location.href = '/'; // Full refresh to clear state
                   }}
-                  style={{ width: "100%", backgroundColor: "transparent", color: "#6b7280", padding: "12px", borderRadius: "12px", fontWeight: "700", cursor: "pointer", border: "1px solid #e5e7eb" }}
+                  style={{ width: "100%", backgroundColor: "transparent", color: "#6b7280", padding: "14px", borderRadius: "12px", fontWeight: "700", cursor: "pointer", border: "1px solid #e5e7eb", transition: "all 0.2s" }}
+                  className="hover-scale"
                 >
                   Cancel & Start Over
                 </button>
@@ -436,7 +459,7 @@ export default function PayPage() {
                     <input type="tel" required placeholder="07XXXXXXXX" value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)} style={{ width: "100%", padding: "14px", borderRadius: "10px", border: "1px solid #e5e7eb" }} />
                   </div>
 
-                  <button type="submit" disabled={loading} style={{ width: "100%", backgroundColor: loading ? "#9ca3af" : "#111827", color: "#ffffff", padding: "18px", borderRadius: "12px", fontWeight: "800", cursor: "pointer", marginTop: "10px" }}>
+                  <button type="submit" disabled={loading} style={{ width: "100%", backgroundColor: loading ? "#9ca3af" : "#111827", color: "#ffffff", padding: "20px", borderRadius: "12px", fontWeight: "800", cursor: "pointer", marginTop: "10px", transition: "all 0.2s" }} className="hover-scale">
                     {loading ? "Initializing..." : `Pay KES ${selectedPlan?.price || ''}`}
                   </button>
                 </form>
@@ -448,7 +471,7 @@ export default function PayPage() {
                         <div style={{ borderTop: "1px solid #f3f4f6", paddingTop: "20px" }}>
                             <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
                                 <input type="text" placeholder="Code or Phone" value={rebindValue} onChange={e => setRebindValue(e.target.value)} style={{ flex: 1, padding: "12px", borderRadius: "10px", border: "1px solid #e5e7eb", fontSize: "14px" }} />
-                                <button onClick={handleCheckStatus} disabled={checkingStatus} style={{ backgroundColor: "#f3f4f6", color: "#111827", padding: "10px 15px", borderRadius: "10px", border: "none", fontWeight: "700", fontSize: "12px" }}>
+                                <button onClick={handleCheckStatus} disabled={checkingStatus} style={{ backgroundColor: "#f3f4f6", color: "#111827", padding: "12px 20px", borderRadius: "10px", border: "none", fontWeight: "700", fontSize: "14px", cursor: "pointer", transition: "all 0.2s" }} className="hover-scale">
                                     {checkingStatus ? "..." : "Balance"}
                                 </button>
                             </div>
@@ -469,7 +492,8 @@ export default function PayPage() {
                             <button
                                 onClick={(e: any) => handleRebind(e)}
                                 disabled={loading}
-                                style={{ width: "100%", backgroundColor: "#4f46e5", color: "white", padding: "14px", borderRadius: "10px", border: "none", fontWeight: "800", textTransform: "uppercase", letterSpacing: "1px" }}
+                                style={{ width: "100%", backgroundColor: "#4f46e5", color: "white", padding: "16px", borderRadius: "10px", border: "none", fontWeight: "800", textTransform: "uppercase", letterSpacing: "1px", cursor: "pointer", transition: "all 0.2s" }}
+                                className="hover-scale"
                             >
                                 {loading ? "Reconnecting..." : "Reconnect This Device"}
                             </button>
@@ -494,7 +518,8 @@ export default function PayPage() {
             <div style={{ marginBottom: "24px" }}>
               <button
                 onClick={handleFreeTrial}
-                style={{ width: "100%", backgroundColor: "#f9fafb", color: "#6b7280", padding: "12px", borderRadius: "12px", border: "1px dashed #d1d5db", fontWeight: "700", fontSize: "12px", cursor: "pointer" }}
+                style={{ width: "100%", backgroundColor: "#f9fafb", color: "#6b7280", padding: "16px", borderRadius: "12px", border: "1px dashed #d1d5db", fontWeight: "700", fontSize: "14px", cursor: "pointer", transition: "all 0.2s" }}
+                className="hover-scale"
               >
                 🎁 Try 10 Minutes for Free
               </button>
@@ -503,7 +528,7 @@ export default function PayPage() {
           <div style={{ height: "1px", backgroundColor: "#f3f4f6", margin: "0 -32px" }} />
           <div style={{ marginTop: "32px", textAlign: "center" }}>
             <p style={{ fontSize: "13px", color: "#6b7280", marginBottom: "16px" }}>Need help with your connection?</p>
-            <a href="tel:0769345599" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "10px", backgroundColor: "#2563eb", color: "#ffffff", padding: "16px", borderRadius: "12px", textDecoration: "none", fontWeight: "800" }}>📞 Contact Customer Care</a>
+            <a href="tel:0769345599" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "10px", backgroundColor: "#2563eb", color: "#ffffff", padding: "18px", borderRadius: "12px", textDecoration: "none", fontWeight: "800", transition: "all 0.2s" }} className="hover-scale">📞 Contact Customer Care</a>
           </div>
         </div>
       </div>
@@ -511,6 +536,10 @@ export default function PayPage() {
       <style jsx>{`
         .spinner { width: 48px; height: 48px; border: 4px solid #f3f4f6; border-top: 4px solid #4f46e5; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .hover-scale { transition: transform 0.2s, opacity 0.2s; }
+        .hover-scale:hover { transform: translateY(-1px); opacity: 0.9; }
+        .hover-scale:active { transform: scale(0.98); opacity: 0.8; }
+        button:disabled { cursor: not-allowed; opacity: 0.6 !important; transform: none !important; }
       `}</style>
     </div>
   );

@@ -292,6 +292,25 @@ export default function AdminDashboard() {
     } catch (e) {}
   };
 
+  const handleDeleteOffer = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this package?")) return;
+    try {
+      const res = await fetch('/api/admin/offers', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id })
+      });
+      if (res.ok) {
+        fetchData(false);
+      } else {
+        const data = await res.json();
+        alert(`❌ Delete failed: ${data.error || 'Unknown error'}`);
+      }
+    } catch (err) {
+      alert("❌ Network error while deleting package.");
+    }
+  };
+
   const handleAddSite = async (e: React.FormEvent) => {
     e.preventDefault();
     setActionLoading(true);
@@ -354,16 +373,24 @@ export default function AdminDashboard() {
                 </p>
                 <button
                   onClick={async () => {
-                    const res = await fetch(`/api/admin/router/test-connection?siteId=${selectedSite}`);
-                    const data = await res.json();
-                    alert(`${data.success ? '✅' : '❌'} ${data.message}\n\nHost: ${data.configUsed?.host || 'N/A'}\nPort: ${data.configUsed?.port || 'N/A'}\nMode: ${data.configUsed?.mode || 'N/A'}\nError: ${data.error || 'None'}\nTip: ${data.tip || 'Check your router settings.'}`);
+                    try {
+                      const res = await fetch(`/api/admin/router/test-connection?siteId=${selectedSite}`);
+                      const data = await res.json();
+                      alert(`${data.success ? '✅' : '❌'} ${data.message}\n\nHost: ${data.configUsed?.host || 'N/A'}\nPort: ${data.configUsed?.port || 'N/A'}\nMode: ${data.configUsed?.mode || 'N/A'}\nError: ${data.error || 'None'}\nTip: ${data.tip || 'Check your router settings.'}${data.error?.includes('404') ? '\n\nNote: 404 Error usually means you need to enable REST API in RouterOS v7+ or use Port 8728 for v6.' : ''}`);
 
-                    if (!data.success) {
-                        const portRes = await fetch(`/api/admin/router/debug-port?host=${data.configUsed?.host}&port=${data.configUsed?.port}`);
-                        const portData = await portRes.json();
-                        alert(`🔍 Port Diagnostic Results:\n\n${portData.message}\n\nTip: ${portData.tip || ''}`);
+                      if (!data.success) {
+                          try {
+                            const portRes = await fetch(`/api/admin/router/debug-port?host=${data.configUsed?.host}&port=${data.configUsed?.port}`);
+                            const portData = await portRes.json();
+                            alert(`🔍 Port Diagnostic Results:\n\n${portData.message}\n\nTip: ${portData.tip || ''}`);
+                          } catch (portErr) {
+                            console.error("Port diagnostic failed:", portErr);
+                          }
+                      }
+                      fetchData(false);
+                    } catch (err) {
+                      alert("❌ Failed to reach connection diagnostic service.");
                     }
-                    fetchData(false);
                   }}
                   className="text-[8px] bg-gray-800 hover:bg-gray-700 px-2 py-0.5 rounded border border-gray-700 font-black uppercase text-indigo-400 ml-2"
                 >

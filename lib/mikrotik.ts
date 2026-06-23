@@ -51,7 +51,7 @@ async function getMikrotikConfig(siteId?: string): Promise<MikrotikConfig> {
       };
     }
   } else {
-    // Default fallback to verified working router IP
+  // Default fallback to verified working router IP
     config = {
       host: '10.5.50.1',
       port: 80,
@@ -61,12 +61,9 @@ async function getMikrotikConfig(siteId?: string): Promise<MikrotikConfig> {
     };
   }
 
-  // FORCE 10.5.50.1 if host is legacy default
+  // Ensure default host if missing
   if (!config.host || config.host === '192.168.88.1') {
       config.host = '10.5.50.1';
-  }
-  if (!config.port || config.port === 8728) {
-      config.port = 80;
   }
 
   console.log(`[MikroTik Config] Using ${config.host}:${config.port} (User: ${config.username})`);
@@ -102,6 +99,9 @@ async function executeRestCommand(path: string, method: string = 'GET', body?: a
 
         if (!response.ok) {
             const errorText = await response.text();
+            if (response.status === 404) {
+                throw new Error(`MikroTik REST API Not Found (404). Ensure 'www' service is enabled and you are on RouterOS v7.1+. Tip: Try switching MIKROTIK_PORT to 8728 in .env.local to use the Legacy API instead.`);
+            }
             throw new Error(`MikroTik REST Error (${response.status}): ${errorText || response.statusText}`);
         }
 
@@ -333,7 +333,34 @@ async function getMikrotikExport(siteId?: string) { return null; }
 async function scanForRogueAPs(siteId?: string) { return []; }
 async function banMikrotikDevice(macAddress: string, voucherCode: string, siteId?: string) { return { success: false, message: "Not implemented in legacy" }; }
 async function setTetheringBlock(enabled: boolean, siteId?: string) { return { success: false, message: "Not implemented in legacy" }; }
-async function activateHotspotSession(mac: string, ip: string, code: string, siteId?: string) { return { success: false, message: "Manual activation not implemented in legacy" }; }
+async function activateHotspotSession(mac: string, ip: string, code: string, siteId?: string) {
+  const config = await getMikrotikConfig(siteId);
+
+  if (config.port === 80 || config.port === 443) {
+      try {
+          console.log(`[MikroTik REST] Activating session for MAC: ${mac}, IP: ${ip}, User: ${code}`);
+          // Attempt to login via REST (if supported/configured in some setups)
+          // Note: Most Hotspots require the client to POST to /login.
+          // However, we can use the API to "active" a user if we have their details.
+          // Another way is to add them to /ip/hotspot/active directly if the router allows it via API.
+
+          const body = {
+              user: code,
+              'mac-address': mac,
+              address: ip,
+              server: 'hotspot1'
+          };
+
+          await executeRestCommand('/ip/hotspot/active', 'POST', body, siteId);
+          return { success: true, message: "Session activated via REST" };
+      } catch (e: any) {
+          console.error(`[MikroTik REST] Activation failed: ${e.message}`);
+          return { success: false, message: e.message };
+      }
+  }
+
+  return { success: false, message: "Manual activation not implemented for Legacy API" };
+}
 
 export {
   createMikrotikVoucher,

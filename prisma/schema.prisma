@@ -130,6 +130,12 @@ model Site {
   PerformanceLogs PerformanceLog[]
   Audits       BalanceAudit[]
   Reports      OperationalReport[]
+  Connections  DeviceConnection[]
+  Blacklist    BlacklistedDevice[]
+  Whitelist    WhitelistedDevice[]
+  Profiles     DeviceProfile[]
+  Alerts       AdminAlert[]
+  RevenueSnapshots RevenueSnapshot[]
 }
 
 model NetworkDevice {
@@ -232,4 +238,111 @@ model Referral {
   rewardMinutes    Int      @default(30)
   isClaimed        Boolean  @default(false)
   createdAt        DateTime @default(now())
+}
+
+model DeviceConnection {
+  id            String    @id @default(cuid())
+  macAddress    String
+  ipAddress     String
+  deviceName    String?   // Device name from MikroTik
+  voucherCode   String?   // Linked voucher if any
+  status        String    @default("CONNECTED") // "CONNECTED", "DISCONNECTED", "EXPIRED"
+  connectedAt   DateTime  @default(now())
+  disconnectedAt DateTime?
+  sessionDuration Int?    // Duration in seconds
+  dataUsed      Float?    // Data used in MB
+  siteId        String    @default("default-site")
+  site          Site      @relation(fields: [siteId], references: [id])
+
+  @@index([macAddress])
+  @@index([ipAddress])
+  @@index([voucherCode])
+  @@index([connectedAt])
+}
+
+model BlacklistedDevice {
+  id            String    @id @default(cuid())
+  macAddress    String
+  ipAddress     String?
+  reason        String    // "High bandwidth", "Spam", "Abuse", etc
+  severity      String    @default("MEDIUM") // LOW, MEDIUM, HIGH
+  bannedAt      DateTime  @default(now())
+  bannedUntil   DateTime? // Null = permanent
+  bannedBy      String    // Admin username
+  notes         String?
+  siteId        String    @default("default-site")
+  site          Site      @relation(fields: [siteId], references: [id])
+
+  @@index([macAddress])
+  @@index([bannedAt])
+}
+
+model WhitelistedDevice {
+  id            String    @id @default(cuid())
+  macAddress    String    @unique
+  ipAddress     String?
+  name          String    // "Admin", "Reception", "Staff", etc
+  reason        String?
+  freeAccess    Boolean   @default(true)
+  allowedUntil  DateTime? // Null = permanent
+  createdAt     DateTime  @default(now())
+  createdBy     String    // Admin username
+  siteId        String    @default("default-site")
+  site          Site      @relation(fields: [siteId], references: [id])
+
+  @@index([macAddress])
+}
+
+model DeviceProfile {
+  id            String    @id @default(cuid())
+  macAddress    String
+  ipAddress     String?
+  deviceType    String?   // "iOS", "Android", "Windows", "Mac", "Unknown"
+  deviceName    String?
+  browserType   String?   // "Safari", "Chrome", "Firefox", etc
+  osVersion     String?
+  totalSessions Int       @default(0)
+  totalDataUsed Float     @default(0) // MB
+  totalSpent    Float     @default(0) // KES
+  firstSeen     DateTime  @default(now())
+  lastSeen      DateTime  @updatedAt
+  siteId        String    @default("default-site")
+  site          Site      @relation(fields: [siteId], references: [id])
+
+  @@index([macAddress])
+  @@index([deviceType])
+  @@index([lastSeen])
+}
+
+model AdminAlert {
+  id            String    @id @default(cuid())
+  type          String    // "ROUTER_DOWN", "HIGH_USAGE", "LOW_BALANCE", "FAILED_PAYMENT", "DEVICE_BANNED"
+  severity      String    @default("MEDIUM") // LOW, MEDIUM, HIGH, CRITICAL
+  title         String
+  message       String
+  data          String?   // JSON with additional context
+  read          Boolean   @default(false)
+  readAt        DateTime?
+  createdAt     DateTime  @default(now())
+  siteId        String    @default("default-site")
+  site          Site      @relation(fields: [siteId], references: [id])
+
+  @@index([read, createdAt])
+  @@index([severity])
+}
+
+model RevenueSnapshot {
+  id            String    @id @default(cuid())
+  date          DateTime  @unique // One per day
+  totalRevenue  Float
+  totalSessions Int
+  activeUsers   Int
+  totalUsers    Int
+  averageSessionDuration Int // seconds
+  topPackage    String?
+  topDeviceType String?
+  siteId        String    @default("default-site")
+  site          Site      @relation(fields: [siteId], references: [id])
+
+  @@index([date])
 }
