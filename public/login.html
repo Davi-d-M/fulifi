@@ -57,6 +57,23 @@
     </style>
 </head>
 <body>
+    <div class="box">
+        <h2>STARLINKNET.<span style="color:#6366f1">WIFI</span></h2>
+        <div class="spinner"></div>
+        <p>Syncing your device with our secure payment gateway. Please wait...</p>
 
+        <a href="https://oil-cinnamon-starfish.ngrok-free.dev?mac=$(mac)&ip=$(ip)&siteId=$(identity)&link-login=$(link-login-only)&link-orig=$(link-orig)" class="btn">
+            Open Portal Manually
+        </a>
+    </div>
+
+    <script>
+        // Intelligent fallback redirection
+        var portalUrl = "https://oil-cinnamon-starfish.ngrok-free.dev?mac=$(mac)&ip=$(ip)&siteId=$(identity)&link-login=$(link-login-only)&link-orig=$(link-orig)";
+
+        setTimeout(function() {
+            window.location.replace(portalUrl);
+        }, 1200);
+    </script>
 </body>
 </html>

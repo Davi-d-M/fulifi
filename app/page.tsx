@@ -22,6 +22,8 @@ export default function PayPage() {
   const [showRefer, setShowRefer] = useState(false);
   const [referPhone, setReferPhone] = useState("");
   const [countdown, setCountdown] = useState(60);
+  const [showTvConnect, setShowTvConnect] = useState(false);
+  const [tvMac, setTvMac] = useState("");
   const [activeReference, setActiveReference] = useState<string | null>(null);
   const [systemBanner, setSystemBanner] = useState<{ text: string, type: string } | null>(null);
 
@@ -113,6 +115,23 @@ export default function PayPage() {
     // 4. Fetch Plans
     const fetchPlans = async () => {
       try {
+        // Log Portal Hit for Analytics
+        const ua = navigator.userAgent;
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(ua);
+        const deviceType = isMobile ? "MOBILE" : "PC";
+
+        fetch('/api/device-connection', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                macAddress: urlMac || "VISITOR",
+                ipAddress: urlIp || "0.0.0.0",
+                deviceName: `${deviceType} - ${ua.split(')')[0].split('(')[1] || 'Guest'}`,
+                status: 'PORTAL_HIT',
+                siteId: urlSiteId
+            })
+        }).catch(() => {});
+
         const res = await fetch(`/api/admin/offers?siteId=${urlSiteId}`, {
           headers: {
             'ngrok-skip-browser-warning': 'true',
@@ -273,6 +292,25 @@ export default function PayPage() {
     }
   };
 
+  const handleTvConnect = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tvMac || !purchasedVoucher) return;
+    setLoading(true);
+    try {
+        const res = await fetch('/api/auth/connect-tv', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tvMac, voucherCode: purchasedVoucher, siteId }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+            alert("📺 TV Connected! Please check your TV now.");
+            setShowTvConnect(false);
+        } else alert(`❌ ${data.error}`);
+    } catch (e) { alert("Connection error."); }
+    finally { setLoading(false); }
+  };
+
   const handleReferral = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!purchasedVoucher || !referPhone) return;
@@ -379,6 +417,21 @@ export default function PayPage() {
               <div style={{ fontSize: "32px", fontWeight: "900", color: "#111827" }}>{purchasedVoucher}</div>
             </div>
 
+            <div style={{ width: "100%", marginBottom: "20px" }}>
+                {!showTvConnect ? (
+                    <button onClick={() => setShowTvConnect(true)} style={{ width: "100%", backgroundColor: "#000", color: "#fff", padding: "14px", borderRadius: "12px", border: "none", fontWeight: "800", fontSize: "14px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
+                        📺 Connect a Smart TV
+                    </button>
+                ) : (
+                    <form onSubmit={handleTvConnect} style={{ backgroundColor: "#f9fafb", padding: "16px", borderRadius: "16px", border: "1px solid #e5e7eb" }}>
+                        <p style={{ fontSize: "11px", color: "#4b5563", fontWeight: "700", marginBottom: "12px" }}>Enter your TV's MAC Address (found in TV Network Settings):</p>
+                        <input type="text" placeholder="AA:BB:CC:DD:EE:FF" value={tvMac} onChange={e => setTvMac(e.target.value)} style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #d1d5db", fontSize: "14px", marginBottom: "12px" }} required />
+                        <button type="submit" style={{ width: "100%", backgroundColor: "#111827", color: "white", padding: "12px", borderRadius: "10px", border: "none", fontWeight: "800", fontSize: "13px" }}>Get TV Online</button>
+                        <button type="button" onClick={() => setShowTvConnect(false)} style={{ width: "100%", background: "none", border: "none", color: "#6b7280", marginTop: "8px", fontSize: "11px", fontWeight: "700" }}>Cancel</button>
+                    </form>
+                )}
+            </div>
+
             <div style={{ width: "100%", marginBottom: "40px" }}>
                 {!showRefer ? (
                     <button onClick={() => setShowRefer(true)} style={{ width: "100%", backgroundColor: "#f5f3ff", color: "#4f46e5", padding: "14px", borderRadius: "12px", border: "1px solid #ddd6fe", fontWeight: "800", fontSize: "14px", cursor: "pointer", transition: "all 0.2s" }} className="hover-scale">
@@ -417,8 +470,20 @@ export default function PayPage() {
             {tunnelBlocked ? (
               <div style={{ textAlign: "center", padding: "40px 20px" }}>
                 <ShieldAlert style={{ color: "#f59e0b", width: "64px", height: "64px", margin: "0 auto 20px" }} />
-                <h3 style={{ fontSize: "20px" }}>Connection Interrupted</h3>
-                <a href="/api/admin/offers" target="_blank" style={{ display: "block", marginTop: "24px", backgroundColor: "#4f46e5", color: "white", padding: "16px", borderRadius: "12px", textDecoration: "none", fontWeight: "800" }}>Confirm Connection</a>
+                <h3 style={{ fontSize: "20px", fontWeight: "800", color: "#111827" }}>Connection Locked</h3>
+                <p style={{ color: "#6b7280", fontSize: "14px", marginTop: "12px" }}>To see the plans, we need to unlock the secure connection.</p>
+                <button
+                  onClick={() => {
+                    // This force-sets the header via a manual link hit
+                    window.open('/api/admin/offers', '_blank');
+                    setTunnelBlocked(false);
+                    setTimeout(() => window.location.reload(), 1000);
+                  }}
+                  style={{ display: "block", width: "100%", marginTop: "24px", backgroundColor: "#4f46e5", color: "white", padding: "18px", borderRadius: "12px", textDecoration: "none", fontWeight: "800", border: "none", cursor: "pointer" }}
+                >
+                  Unlock Plans Now
+                </button>
+                <p style={{ fontSize: "11px", color: "#9ca3af", marginTop: "16px" }}>After clicking, a new tab will open. Close it and return here.</p>
               </div>
             ) : isWaitingForPin ? (
               <div style={{ textAlign: "center", padding: "40px 20px" }}>
@@ -446,10 +511,11 @@ export default function PayPage() {
             ) : (
               <>
                 <p style={{ textAlign: "center", color: "#6b7280", fontSize: "14px", marginBottom: "32px" }}>Choose a plan and connect instantly</p>
-                <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "32px" }}>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "12px" }}>
                   {fetching ? (
                     <div style={{ textAlign: "center" }}><div className="spinner" style={{ width: "24px", height: "24px", margin: "0 auto" }}></div></div>
-                  ) : bundlePlans.map((plan) => (
+                  ) : bundlePlans.filter(p => p.id !== 'offer_tv' && !p.name.toLowerCase().includes('tv')).map((plan) => (
                     <div key={plan.id} onClick={() => setSelectedPlan(plan)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px", borderRadius: "14px", border: selectedPlan?.id === plan.id ? "2px solid #4f46e5" : "1px solid #f3f4f6", cursor: "pointer", backgroundColor: selectedPlan?.id === plan.id ? "#f5f3ff" : "#fff" }}>
                       <div>
                         <div style={{ fontWeight: "800", color: "#1f2937" }}>{plan.name}</div>
@@ -459,6 +525,38 @@ export default function PayPage() {
                     </div>
                   ))}
                 </div>
+
+                {/* SMART TV SPECIAL - IDENTICAL TO STANDARD PLANS */}
+                {!fetching && bundlePlans.find(p => p.id === 'offer_tv' || p.name.toLowerCase().includes('tv')) && (
+                    <div
+                      onClick={() => {
+                        const tvPlan = bundlePlans.find(p => p.id === 'offer_tv' || p.name.toLowerCase().includes('tv'));
+                        if (tvPlan) setSelectedPlan(tvPlan);
+                      }}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        padding: "18px",
+                        borderRadius: "14px",
+                        border: selectedPlan?.id === bundlePlans.find(p => p.id === 'offer_tv' || p.name.toLowerCase().includes('tv'))?.id ? "2px solid #4f46e5" : "1px solid #f3f4f6",
+                        cursor: "pointer",
+                        backgroundColor: selectedPlan?.id === bundlePlans.find(p => p.id === 'offer_tv' || p.name.toLowerCase().includes('tv'))?.id ? "#f5f3ff" : "#fff",
+                        marginBottom: "32px",
+                        position: "relative",
+                        overflow: "hidden"
+                      }}
+                    >
+                        {/* THE RIBBON - Shifted to stay away from the Price */}
+                        <div style={{ position: "absolute", top: "8px", right: "-38px", backgroundColor: "#ef4444", color: "white", padding: "2px 45px", fontSize: "8px", fontWeight: "950", transform: "rotate(45deg)", letterSpacing: "1px", zIndex: 10 }}>HOT</div>
+
+                        <div>
+                            <div style={{ fontWeight: "800", color: "#1f2937" }}>{bundlePlans.find(p => p.id === 'offer_tv' || p.name.toLowerCase().includes('tv'))?.name}</div>
+                            <div style={{ fontSize: "12px", color: "#6b7280" }}>{bundlePlans.find(p => p.id === 'offer_tv' || p.name.toLowerCase().includes('tv'))?.duration} | 4K Streaming</div>
+                        </div>
+                        <div style={{ fontWeight: "900", color: "#111827", paddingRight: "15px" }}>{bundlePlans.find(p => p.id === 'offer_tv' || p.name.toLowerCase().includes('tv'))?.price} KES</div>
+                    </div>
+                )}
 
                 <form onSubmit={handlePayment} style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
                   <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>

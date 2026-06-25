@@ -122,7 +122,8 @@ async function processSuccessfulPayment(paymentData: any) {
       speedLimit,
       dataLimitMB || undefined,
       undefined, undefined, undefined,
-      siteId
+      siteId,
+      dbOffer?.maxDevices || 1
     );
 
     // 4. Update Provisioning Status

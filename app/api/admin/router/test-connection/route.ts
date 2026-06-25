@@ -22,9 +22,11 @@ export async function GET(request: Request) {
         user: config.username,
         mode: config.port === 80 || config.port === 443 ? 'REST_API' : 'LEGACY_API'
       },
-      tip: config.port === 80 || config.port === 443
-        ? "Check if 'www' service (Port 80) is enabled in WinBox (IP > Services)."
-        : "Check if 'api' service (Port 8728) is enabled in WinBox (IP > Services)."
+      tip: result.success
+        ? "Your router is communicating perfectly! Vouchers will be created instantly."
+        : config.port === 80 || config.port === 443
+          ? "Check if 'www' service (Port 80) is enabled in WinBox (IP > Services). If you are on an older RouterOS (<7.1), change MIKROTIK_PORT to 8728 in .env."
+          : "Check if 'api' service (Port 8728) is enabled in WinBox (IP > Services). Ensure the admin password in .env matches the router."
     });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });

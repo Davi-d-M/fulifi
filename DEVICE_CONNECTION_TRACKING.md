@@ -181,22 +181,40 @@ curl -X PUT http://localhost:3000/api/device-connection \
 
 ## Integration with MikroTik
 
-### Option 1: Automatic via Login Hook
+### Option 1: Automatic via Hotspot Scripts (Recommended)
 
 1. In MikroTik Winbox, go to **IP → Hotspot → Server Profiles**
-2. Double-click your profile → **Login** tab
-3. Add this script to **On User Login**:
+2. Double-click your profile → **Scripts** tab
+3. Add this script to **On Login**:
 
 ```bash
 {
-  local mac [/ip hotspot active get [find where address=$"remote-address"] mac-address];
-  local ip $"remote-address";
+  local mac $"mac-address";
+  local ip $"address";
+  local user $"user";
   
   :do {
     /tool fetch url="http://YOUR_PORTAL_IP:3000/api/device-connection" mode=http \
       http-method=post \
-      http-data="macAddress=$mac&ipAddress=$ip&deviceName=$\"local-address\""
-  } on-error={}
+      http-data="{\"macAddress\":\"$mac\",\"ipAddress\":\"$ip\",\"voucherCode\":\"$user\",\"deviceName\":\"MikroTik-Session\"}" \
+      http-header-field="Content-Type: application/json"
+  } on-error={ :log error "FULIFI: Failed to log connection for $user" }
+}
+```
+
+4. Add this script to **On Logout**:
+
+```bash
+{
+  local mac $"mac-address";
+  local ip $"address";
+  
+  :do {
+    /tool fetch url="http://YOUR_PORTAL_IP:3000/api/device-connection" mode=http \
+      http-method=put \
+      http-data="{\"macAddress\":\"$mac\",\"ipAddress\":\"$ip\",\"status\":\"DISCONNECTED\"}" \
+      http-header-field="Content-Type: application/json"
+  } on-error={ :log error "FULIFI: Failed to log disconnect for $mac" }
 }
 ```
 

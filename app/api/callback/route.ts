@@ -94,7 +94,8 @@ export async function POST(req: NextRequest) {
         speedLimit,
         payment.offer?.dataLimitMB || undefined,
         undefined, undefined, undefined,
-        payment.siteId
+        payment.siteId,
+        payment.offer?.maxDevices || 1
       );
 
       // 4. Force immediate session activation if MAC is available (Optional but helpful)

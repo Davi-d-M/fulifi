@@ -4,6 +4,9 @@ import { createMikrotikVoucher, activateHotspotSession, terminateMikrotikSession
 
 export async function POST(req: NextRequest) {
   try {
+    // SECURITY: Brute-Force Throttling
+    await new Promise(resolve => setTimeout(resolve, 1500));
+
     const { voucherCode, phoneNumber, mac, ip, siteId } = await req.json();
 
     if ((!voucherCode && !phoneNumber) || !mac) {
@@ -44,7 +47,8 @@ export async function POST(req: NextRequest) {
       mac,
       payment.offer?.speedLimit || '5M/5M',
       undefined, undefined, undefined, undefined,
-      currentSiteId
+      currentSiteId,
+      payment.offer?.maxDevices || 1
     );
 
     if (routerResult.success) {

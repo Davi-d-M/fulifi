@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { WIFI_BILLING_CATALOG } from '@/app/config/packages';
+import { createMikrotikVoucher } from '@/lib/mikrotik';
 import crypto from 'crypto';
 
 // Use the same readable character set as the webhook
@@ -104,15 +105,43 @@ export async function POST(request: Request) {
         throw new Error("Could not generate unique codes. Please try again.");
     }
 
-    // Perform batch insert - use a loop for better error handling on SQLite
+    const vouchersData = uniqueCodes.map(code => ({
+      voucherCode: code,
+      offerId: package_id,
+      isUsed: false,
+      siteId
+    }));
+
+    // Perform batch insert and sync with Router
     const createdResults = [];
+    console.log(`[Bulk] Syncing ${vouchersData.length} vouchers to MikroTik...`);
+
     for (const data of vouchersData) {
       try {
-        const v = await p.bulkVoucher.create({
-          data,
-          include: { offer: true }
-        });
-        createdResults.push(v);
+        // 1. Provision on Router first
+        const routerResult = await createMikrotikVoucher(
+          data.voucherCode,
+          data.offerId,
+          offer.durationMin,
+          offer.expiryMode,
+          undefined, // No MAC binding for physical vouchers
+          offer.speedLimit,
+          offer.dataLimitMB || undefined,
+          undefined, undefined, undefined,
+          siteId,
+          offer.maxDevices || 1
+        );
+
+        if (routerResult.success) {
+          // 2. Save to DB only if router accepted it
+          const v = await p.bulkVoucher.create({
+            data,
+            include: { offer: true }
+          });
+          createdResults.push(v);
+        } else {
+          console.error(`[Bulk] Router rejected ${data.voucherCode}: ${routerResult.error}`);
+        }
       } catch (e: any) {
         console.warn(`[Bulk] Skipping code ${data.voucherCode} due to error:`, e.message);
       }

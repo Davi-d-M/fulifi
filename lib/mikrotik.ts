@@ -6,8 +6,10 @@ import {
     testLegacyConnection,
     terminateLegacySession,
     getLegacyResources,
+    getLegacyTraffic,
     addLegacyVoucherTime,
-    checkLegacyUserExists
+    checkLegacyUserExists,
+    executeLegacyCommand
 } from './mikrotik-legacy';
 
 interface MikrotikConfig {
@@ -28,11 +30,11 @@ interface VoucherCreationResult {
 async function getMikrotikConfig(siteId?: string): Promise<MikrotikConfig> {
   // 1. Start with values from .env.local (The Source of Truth)
   let config: MikrotikConfig = {
-    host: process.env.MIKROTIK_HOST || '192.168.150.2',
+    host: process.env.MIKROTIK_HOST || '10.5.50.1',
     port: parseInt(process.env.MIKROTIK_PORT || '80'),
     username: process.env.MIKROTIK_USER || 'admin',
     password: process.env.MIKROTIK_PASSWORD || '',
-    timeout: 15000,
+    timeout: 20000,
   };
 
   // 2. If a specific site is requested, try to override with site-specific settings
@@ -128,7 +130,8 @@ async function createMikrotikVoucher(
   burstLimit?: string,
   burstThreshold?: string,
   burstTime?: string,
-  siteId?: string
+  siteId?: string,
+  maxDevices?: number
 ): Promise<VoucherCreationResult> {
   const profileName = getProfileName(packageId);
   const config = await getMikrotikConfig(siteId);
@@ -140,6 +143,7 @@ async function createMikrotikVoucher(
   // Calculate rate limit if not provided
   const finalRateLimit = rateLimit || '5M/5M';
   const finalBytesTotal = dataLimitMB ? dataLimitMB * 1024 * 1024 : 0;
+  const finalMaxDevices = maxDevices || 1;
 
   // If port is 80 or 443, use REST API
   if (config.port === 80 || config.port === 443) {
@@ -147,28 +151,27 @@ async function createMikrotikVoucher(
           console.log(`[MikroTik REST] Creating voucher ${voucherCode} on site ${siteId || 'default'}`);
 
           // FOR REST API, the path is /ip/hotspot/user
-          const body: any = {
+          const restBody: any = {
               name: voucherCode,
               password: voucherCode,
               profile: profileName,
               server: 'hotspot1',
-              comment: `Starlinknet.WIFI REST - ${new Date().toISOString()}`,
-              'rate-limit': finalRateLimit
+              comment: `STARLINKNET.WIFI REST - ${new Date().toISOString()}`,
+              'rate-limit': finalRateLimit,
+              'shared-users': String(finalMaxDevices)
           };
 
           if (finalBytesTotal > 0) {
-              body['limit-bytes-total'] = finalBytesTotal.toString();
+              restBody['limit-bytes-total'] = finalBytesTotal.toString();
           }
 
           if (durationMin) {
               const h = Math.floor(durationMin / 60);
               const m = durationMin % 60;
-              body['limit-uptime'] = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
+              restBody['limit-uptime'] = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
           }
 
-          // FIX: REST API path doesn't need /rest prefix here as executeRestCommand adds it,
-          // but we must ensure we use the correct resource path.
-          await executeRestCommand('/ip/hotspot/user', 'PUT', body, siteId);
+          await executeRestCommand('/ip/hotspot/user', 'PUT', restBody, siteId);
           return { success: true, voucherCode, profileName };
       } catch (e: any) {
           console.error("[MikroTik REST] Voucher Creation Error:", e.message);
@@ -176,14 +179,15 @@ async function createMikrotikVoucher(
           // HEAL: If PUT fails, try POST (Some ROS versions prefer POST for creation)
           try {
               console.log("[MikroTik REST] Retrying with POST...");
-              const body: any = {
+              const postBody: any = {
                   name: voucherCode,
                   password: voucherCode,
                   profile: profileName,
                   server: 'hotspot1',
-                  'rate-limit': finalRateLimit
+                  'rate-limit': finalRateLimit,
+                  'shared-users': String(finalMaxDevices)
               };
-              await executeRestCommand('/ip/hotspot/user', 'POST', body, siteId);
+              await executeRestCommand('/ip/hotspot/user', 'POST', postBody, siteId);
               return { success: true, voucherCode, profileName };
           } catch (retryErr: any) {
               return { success: false, voucherCode, profileName, error: retryErr.message };
@@ -198,7 +202,8 @@ async function createMikrotikVoucher(
       siteId,
       durationMin,
       finalRateLimit,
-      dataLimitMB
+      dataLimitMB,
+      finalMaxDevices
   );
   if (result.success) return { success: true, voucherCode, profileName };
   return { success: false, voucherCode, profileName, error: result.error };
@@ -333,10 +338,64 @@ async function addVoucherTime(voucherCode: string, minutes: number, siteId?: str
   return await addLegacyVoucherTime(voucherCode, minutes, siteId);
 }
 
+async function getMikrotikTraffic(siteId?: string, interfaceName: string = 'ether1') {
+  const config = await getMikrotikConfig(siteId);
+
+  if (config.port === 80 || config.port === 443) {
+      try {
+          const data = await executeRestCommand('/interface/monitor-traffic', 'POST', {
+              interface: interfaceName,
+              once: true
+          }, siteId);
+          return Array.isArray(data) ? data[0] : data;
+      } catch (e) {
+          console.error(`[MikroTik REST] Traffic fetch failed: ${e.message}`);
+          return null;
+      }
+  }
+
+  return await getLegacyTraffic(interfaceName, siteId);
+}
+
 // These are secondary/optional for now
 async function getMikrotikInterfaces(siteId?: string) { return []; }
 async function pingDeviceFromRouter(address: string, siteId?: string) { return { alive: false }; }
-async function getMikrotikExport(siteId?: string) { return null; }
+async function getMikrotikExport(siteId?: string) {
+  const config = await getMikrotikConfig(siteId);
+
+  if (config.port === 80 || config.port === 443) {
+      try {
+          // For REST API, we fetch basic system identity and resource info as a "backup"
+          const identity = await executeRestCommand('/system/identity', 'GET', undefined, siteId);
+          const resources = await executeRestCommand('/system/resource', 'GET', undefined, siteId);
+          const users = await executeRestCommand('/ip/hotspot/user', 'GET', undefined, siteId);
+          const profiles = await executeRestCommand('/ip/hotspot/user/profile', 'GET', undefined, siteId);
+
+          const backupHeader = `# STARLINKNET.WIFI REST Cloud Backup\n# Identity: ${identity.name}\n# Generated: ${new Date().toISOString()}\n\n`;
+          return backupHeader + JSON.stringify({ identity, resources, profiles, usersCount: users.length }, null, 2);
+      } catch (e: any) {
+          console.error(`[MikroTik REST] Export failed: ${e.message}`);
+          return null;
+      }
+  }
+
+  try {
+      // For Legacy API, we use identity and resource print as a proof of backup
+      const [identity, resources] = await Promise.all([
+          executeLegacyCommand(['/system/identity/print'], siteId),
+          executeLegacyCommand(['/system/resource/print'], siteId)
+      ]);
+
+      if (identity && identity.length > 0) {
+          const backupHeader = `# STARLINKNET.WIFI Legacy Cloud Backup\n# Identity: ${identity[0].name}\n# Generated: ${new Date().toISOString()}\n\n`;
+          return backupHeader + JSON.stringify({ identity: identity[0], resources: resources[0] }, null, 2);
+      }
+      return null;
+  } catch (e) {
+      console.error(`[MikroTik Legacy] Export failed:`, e);
+      return null;
+  }
+}
 async function scanForRogueAPs(siteId?: string) { return []; }
 async function banMikrotikDevice(macAddress: string, voucherCode: string, siteId?: string) { return { success: false, message: "Not implemented in legacy" }; }
 async function setTetheringBlock(enabled: boolean, siteId?: string) { return { success: false, message: "Not implemented in legacy" }; }
@@ -398,6 +457,7 @@ export {
   getMikrotikExport,
   scanForRogueAPs,
   addVoucherTime,
+  getMikrotikTraffic,
   banMikrotikDevice,
   setTetheringBlock,
   activateHotspotSession,

@@ -3,9 +3,28 @@ import { PrismaClient } from '@prisma/client'
 const prismaClientSingleton = () => {
   return new PrismaClient({
     log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
-    // Note: SQLite doesn't support traditional connection pooling,
-    // but we can optimize query timeouts for high traffic.
-  })
+    // Supabase Pooling Configuration
+    // Increase connection timeout for unstable networks
+  }).$extends({
+    query: {
+      async $allOperations({ operation, model, args, query }) {
+        const start = Date.now();
+        try {
+          return await query(args);
+        } catch (error: any) {
+          if (error.message?.includes('connection') || error.message?.includes('reached')) {
+            console.error(`[Prisma Database Error] Critical connection failure in ${model}.${operation}`);
+          }
+          throw error;
+        } finally {
+          const end = Date.now();
+          if (end - start > 5000) {
+            console.warn(`[Prisma Slow Query] ${model}.${operation} took ${end - start}ms`);
+          }
+        }
+      },
+    },
+  });
 }
 
 declare global {
@@ -15,14 +34,6 @@ declare global {
 // In Next.js dev, we use a global variable to preserve the Prisma instance
 // across hot-reloads.
 const getPrisma = () => {
-  if (process.env.NODE_ENV !== 'production') {
-    if (!globalThis.prismaGlobal) {
-      globalThis.prismaGlobal = prismaClientSingleton()
-    }
-    return globalThis.prismaGlobal
-  }
-
-  // Production singleton
   if (!globalThis.prismaGlobal) {
     globalThis.prismaGlobal = prismaClientSingleton()
   }
@@ -31,22 +42,32 @@ const getPrisma = () => {
 
 export const prisma = getPrisma()
 
-// Bulletproof Query Wrapper: Retries once on transient failures
-export async function prismaRetry<T>(queryFn: () => Promise<T>, retries = 2): Promise<T> {
+/**
+ * Bulletproof Query Wrapper: Retries once on transient failures
+ * Optimized for Supabase/Postgres connection resets.
+ */
+export async function prismaRetry<T>(queryFn: () => Promise<T>, retries = 3): Promise<T> {
   let lastError: any;
   for (let i = 0; i < retries; i++) {
     try {
       return await queryFn();
     } catch (error: any) {
       lastError = error;
-      // Only retry on connection or timeout errors (common in high traffic)
-      if (error.message?.includes('connection') || error.message?.includes('timeout') || error.message?.includes('pool')) {
-        console.warn(`[Prisma] Transient error detected, retrying (${i + 1}/${retries})...`);
-        await new Promise(resolve => setTimeout(resolve, 200)); // Small jitter
+      const isNetworkError =
+        error.message?.toLowerCase().includes('connection') ||
+        error.message?.toLowerCase().includes('timeout') ||
+        error.message?.toLowerCase().includes('pool') ||
+        error.message?.toLowerCase().includes('reached') ||
+        error.message?.toLowerCase().includes('broken pipe');
+
+      if (isNetworkError) {
+        console.warn(`[Prisma Database] Connection failure, retrying (${i + 1}/${retries})...`);
+        await new Promise(resolve => setTimeout(resolve, 500 * (i + 1))); // Incremental backoff
         continue;
       }
-      throw error; // If it's a code/logic error, don't retry
+      throw error;
     }
   }
+  console.error("[Prisma Database] Fatal exhaustion of retries.");
   throw lastError;
 }

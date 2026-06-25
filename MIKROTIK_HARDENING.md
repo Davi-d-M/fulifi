@@ -1,48 +1,41 @@
-# MikroTik Hardware Hardening & Optimization
+# MikroTik Security Hardening (Anti-Hacker Script)
 
-To complete your "Bulletproof" setup, run these commands in your MikroTik terminal.
+To prevent hackers from bypassing your billing or attacking your router directly, run these commands in your **MikroTik Terminal**.
 
-## 1. MAC Address Spoofing & Session Hijacking Defense
-Prevent advanced users from cloning MAC addresses to steal premium access.
+## 1. Lockdown API Ports
+Replace `[YOUR_SERVER_IP]` with the IP address of your Next.js server (if using a VPS) or your local management PC.
 
 ```bash
-# 1. Force the router to bind the user's IP to their MAC address
-# 2. Limit each MAC to exactly 1 simultaneous session
-/ip hotspot profile set Starlink_Prof address-per-mac=1
-
-# 3. Enable IP+MAC binding checks on the bridge
-/interface bridge set [find name=bridge-hotspot] arp=reply-only
+# Only allow your server to talk to the router's management ports
+/ip firewall filter add chain=input protocol=tcp dst-port=80,8728 src-address=[YOUR_SERVER_IP] action=accept comment="Allow FULIFI API"
+/ip firewall filter add chain=input protocol=tcp dst-port=80,8728 action=drop comment="BLOCK ALL OTHER API TRAFFIC"
 ```
 
-## 2. Router Storage Protection (Log Rotation)
-Prevent the router from freezing due to flash storage filling up with logs.
+## 2. Prevent MAC Spoofing
+This ensures that even if a hacker clones a paying customer's MAC address, they won't get access unless they also have the exact same IP address.
 
 ```bash
-# 1. Clear disk logs and move all logging to RAM (Memory)
-/system logging action set memory memory-lines=1000
-/system logging action set disk disk-lines-per-file=100
-
-# 2. Configure Hotspot logs to stay in Memory
-/system logging add action=memory topics=hotspot,info
-/system logging add action=memory topics=hotspot,debug
-/system logging add action=memory topics=hotspot,account
+# Enable strict IP-MAC binding in the Hotspot
+/ip hotspot set [find] address-per-mac=1
+/ip hotspot user profile set [find] shared-users=1
 ```
 
-## 3. Hardware Auto-Reboot (Watchdog)
-If the CPU hits 100% and the router freezes, the hardware will detect it and reboot automatically.
+## 3. Disable Unused Services
+Hackers look for open doors. Close the ones you don't use.
 
 ```bash
-/system watchdog set watch-address=8.8.8.8 action=reboot
+/ip service disable telnet,ftp,www-ssl,api-ssl
+# Keep 'www' (80) and 'api' (8728) enabled only if you are using them
+```
+
+## 4. Protection against Brute Force
+If someone tries to log into your router's admin panel too many times, block them automatically.
+
+```bash
+/ip firewall filter add chain=input protocol=tcp dst-port=22,80,8291 connection-state=new src-address-list=admin_blacklist action=drop
+/ip firewall filter add chain=input protocol=tcp dst-port=22,80,8291 connection-state=new action=add-src-to-address-list address-list=admin_blacklist address-list-timeout=1d connection-limit=3,32
 ```
 
 ---
 
-## 4. Advanced Security: Isolate Management
-Ensure the public WiFi users cannot attempt to log into your router's admin panel.
-
-```bash
-# Drop all input traffic to the router from the Hotspot Bridge except DNS
-/ip firewall filter add chain=input interface=bridge-hotspot protocol=udp dst-port=53 action=accept
-/ip firewall filter add chain=input interface=bridge-hotspot protocol=tcp dst-port=53 action=accept
-/ip firewall filter add chain=input interface=bridge-hotspot action=drop comment="BLOCK_HOTSPOT_TO_ROUTER_ADMIN"
-```
+**Security status: HARDENED 🛡️**

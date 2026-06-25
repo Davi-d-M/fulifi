@@ -17,8 +17,8 @@ export default function RootLayout({
         margin: 0,
         padding: 0,
         height: '100%',
-        backgroundColor: '#f3f4f6', // Light gray background
-        color: '#111827',
+        backgroundColor: '#0a0c10', // Uniformly dark background
+        color: '#f3f4f6',
         display: 'flex',
         flexDirection: 'column'
       }}>

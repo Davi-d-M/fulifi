@@ -3,6 +3,10 @@ import { prisma } from '@/lib/prisma';
 
 export async function GET(req: NextRequest) {
   try {
+    // SECURITY: Brute-Force Throttling
+    // Delay response to slow down automated voucher guessing scripts
+    await new Promise(resolve => setTimeout(resolve, 1500));
+
     const { searchParams } = new URL(req.url);
     const identifier = searchParams.get('id'); // voucherCode or phoneNumber
     const siteId = searchParams.get('siteId') || 'default-site';

@@ -4,7 +4,7 @@ import { getMikrotikConfig } from './mikrotik';
 /**
  * Executes a command on MikroTik using the legacy API (Port 8728).
  */
-async function executeLegacyCommand(command: string[], siteId?: string): Promise<any> {
+export async function executeLegacyCommand(command: string[], siteId?: string): Promise<any> {
     const config = await getMikrotikConfig(siteId);
     const hostIp = config.host.split(':')[0];
 
@@ -61,7 +61,8 @@ export async function createLegacyVoucher(
     siteId?: string,
     durationMin?: number,
     rateLimit?: string,
-    dataLimitMB?: number
+    dataLimitMB?: number,
+    maxDevices: number = 1
 ) {
     try {
         const cmd = [
@@ -70,7 +71,8 @@ export async function createLegacyVoucher(
             `=password=${voucherCode}`,
             `=profile=${profile}`,
             `=server=hotspot1`,
-            `=comment=Starlinknet.WIFI Legacy - ${new Date().toISOString()}`
+            `=comment=STARLINKNET.WIFI Legacy - ${new Date().toISOString()}`,
+            `=shared-users=${maxDevices}`
         ];
 
         if (rateLimit) cmd.push(`=rate-limit=${rateLimit}`);
@@ -168,5 +170,23 @@ export async function testLegacyConnection(siteId?: string) {
     } catch (e: any) {
         console.error("[MikroTik Legacy] Connection failed:", e.message || e);
         return { success: false, error: e.message || "Unknown Connection Error" };
+    }
+}
+
+export async function getLegacyTraffic(interfaceName: string = 'ether1', siteId?: string) {
+    try {
+        const data = await executeLegacyCommand(['/interface/monitor-traffic', `=interface=${interfaceName}`, '=once='], siteId);
+        return data[0] || null;
+    } catch (e) {
+        return null;
+    }
+}
+
+export async function getLegacyTraffic(interfaceName: string = 'ether1', siteId?: string) {
+    try {
+        const data = await executeLegacyCommand(['/interface/monitor-traffic', `=interface=${interfaceName}`, '=once='], siteId);
+        return data[0] || null;
+    } catch (e) {
+        return null;
     }
 }

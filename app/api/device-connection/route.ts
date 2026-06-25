@@ -7,12 +7,18 @@ export const maxDuration = 30;
 /**
  * POST /api/device-connection
  * Log when a device connects to the WiFi hotspot
- * Called from MikroTik hotspot login or monitoring script
  */
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { macAddress, ipAddress, deviceName, voucherCode, siteId = 'default-site' } = body;
+    let { macAddress, ipAddress, deviceName, voucherCode, siteId = 'default-site' } = body;
+
+    // SECURITY: Input Sanitization (Prevent XSS/Injection)
+    const sanitize = (str: string) => str ? str.replace(/[<>\"']/g, '') : str;
+    macAddress = sanitize(macAddress);
+    ipAddress = sanitize(ipAddress);
+    deviceName = sanitize(deviceName)?.substring(0, 50); // Limit length
+    voucherCode = sanitize(voucherCode);
 
     // Validate required fields
     if (!macAddress || !ipAddress) {
@@ -37,6 +43,28 @@ export async function POST(req: NextRequest) {
         siteId,
       },
     });
+
+    // If a voucher is provided, sync with ActiveSession table
+    if (voucherCode && voucherCode !== "NONE") {
+        // Try to find the expiry time from Payment or BulkVoucher
+        let expiresAt = new Date(Date.now() + 60 * 60 * 1000); // Default 1 hour fallback
+
+        const payment = await prisma.payment.findFirst({ where: { voucherCode, siteId } });
+        if (payment) {
+            expiresAt = payment.expiresAt;
+        } else {
+            const bulk = await prisma.bulkVoucher.findUnique({ where: { voucherCode }, include: { offer: true } });
+            if (bulk && bulk.offer) {
+                expiresAt = new Date(Date.now() + bulk.offer.durationMin * 60 * 1000);
+            }
+        }
+
+        await prisma.activeSession.upsert({
+            where: { macAddress },
+            update: { voucherCode, ipAddress, expiresAt, siteId },
+            create: { macAddress, voucherCode, ipAddress, expiresAt, siteId }
+        }).catch(() => {});
+    }
 
     // Send real-time alert if admin notification is needed
     console.log(`[Device Connection] ✅ Logged connection: ${connection.id}`);
@@ -117,6 +145,7 @@ export async function GET(req: NextRequest) {
       });
 
       const activeCount = allConnections.filter((c) => c.status === 'CONNECTED' && !c.disconnectedAt).length;
+      const portalHits = allConnections.filter((c) => c.status === 'PORTAL_HIT').length;
       const disconnectedCount = allConnections.filter((c) => c.status === 'DISCONNECTED').length;
       const expiredCount = allConnections.filter((c) => c.status === 'EXPIRED').length;
 
@@ -125,6 +154,7 @@ export async function GET(req: NextRequest) {
         action: 'stats',
         totalConnections: allConnections.length,
         activeConnections: activeCount,
+        portalHits,
         disconnectedConnections: disconnectedCount,
         expiredConnections: expiredCount,
         firstConnection: allConnections[0]?.connectedAt,

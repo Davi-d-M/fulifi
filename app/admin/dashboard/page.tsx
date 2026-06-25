@@ -7,7 +7,7 @@ import {
   XCircle, Zap, Wifi, Clock, Database, Smartphone,
   CheckCircle2, ShieldAlert, Cpu, HardDrive, LayoutDashboard,
   Download, List, Printer, Plus, AlertTriangle, ArrowUpRight,
-  Search, MessageSquare, Globe
+  Search, MessageSquare, Globe, Monitor, Eye
 } from 'lucide-react';
 
 export default function AdminDashboard() {
@@ -15,6 +15,7 @@ export default function AdminDashboard() {
   const [offers, setOffers] = useState<any[]>([]);
   const [activeSessions, setActiveSessions] = useState<any[]>([]);
   const [deviceConnections, setDeviceConnections] = useState<any[]>([]);
+  const [connectionHistory, setConnectionHistory] = useState<any[]>([]);
   const [connectionStats, setConnectionStats] = useState<any>(null);
   const [routerInfo, setRouterInfo] = useState<any>({ cpu: 0, memory: '0', uptime: '0s', isOnline: false });
   const [ledger, setLedger] = useState<any[]>([]);
@@ -24,12 +25,15 @@ export default function AdminDashboard() {
   const [securityAlerts, setSecurityAlerts] = useState<any[]>([]);
   const [backups, setBackups] = useState<any[]>([]);
   const [speedLogs, setSpeedLogs] = useState<any[]>([]);
+  const [latencyLogs, setLatencyLogs] = useState<any[]>([]);
   const [globalStats, setGlobalStats] = useState<any>(null);
   const [showGlobal, setShowGlobal] = useState(false);
   const [systemSettings, setSystemSettings] = useState({ bannerText: '', bannerType: 'info', blockTethering: false });
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [showBulkScreen, setShowBulkScreen] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [liveTraffic, setLiveTraffic] = useState({ rx: 0, tx: 0 });
   const router = useRouter();
 
   // Form states
@@ -53,14 +57,32 @@ export default function AdminDashboard() {
         try {
           const res = await fetch(url, { headers });
           if (res.status === 401) { router.push('/admin/login'); return null; }
-          if (!res.ok) return null;
+          if (res.status === 404) {
+            console.warn(`[Dashboard] Endpoint not found: ${url}`);
+            return null;
+          }
+          if (!res.ok) {
+            console.error(`[Dashboard] Fetch failed for ${url}: ${res.status} ${res.statusText}`);
+            return null;
+          }
           const text = await res.text();
-          if (text.includes('<!DOCTYPE')) return null;
-          return JSON.parse(text);
-        } catch (e) { return null; }
+          if (text.includes('<!DOCTYPE')) {
+             console.warn(`[Dashboard] HTML response detected for ${url} (Likely a redirect or tunnel page)`);
+             return null;
+          }
+          try {
+            return JSON.parse(text);
+          } catch (parseErr) {
+            console.error(`[Dashboard] JSON Parse Error for ${url}:`, text.substring(0, 100));
+            return null;
+          }
+        } catch (e) {
+          console.error(`[Dashboard] Fetch exception for ${url}:`, e);
+          return null;
+        }
       };
 
-      const [metr, offr, sess, sys, sett, ledg, ana, sitList, alrts, bckps, glob, spd, devCon, conStat] = await Promise.all([
+      const [metr, offr, sess, sys, sett, ledg, ana, sitList, alrts, bckps, glob, spd, devCon, conStat, conHist, lat] = await Promise.all([
         safeFetch(`/api/admin/metrics?siteId=${selectedSite}`),
         safeFetch(`/api/admin/offers?siteId=${selectedSite}`),
         safeFetch(`/api/admin/router/active-users?siteId=${selectedSite}`),
@@ -74,7 +96,9 @@ export default function AdminDashboard() {
         safeFetch('/api/admin/analytics/global'),
         safeFetch('/api/admin/network/speedtest'),
         safeFetch(`/api/device-connection?action=active&siteId=${selectedSite}`),
-        safeFetch(`/api/device-connection?action=stats&siteId=${selectedSite}`)
+        safeFetch(`/api/device-connection?action=stats&siteId=${selectedSite}`),
+        safeFetch(`/api/device-connection?action=history&siteId=${selectedSite}`),
+        safeFetch(`/api/admin/network/ping?siteId=${selectedSite}`)
       ]);
 
       if (metr) setMetrics(metr);
@@ -84,6 +108,8 @@ export default function AdminDashboard() {
       if (ledg) setLedger(ledg);
       if (devCon) setDeviceConnections(devCon.devices || []);
       if (conStat) setConnectionStats(conStat);
+      if (conHist) setConnectionHistory(conHist.devices || []);
+      if (lat) setLatencyLogs(lat);
 
       // Mock analytics if null for the chart demo
       if (ana) {
@@ -131,6 +157,26 @@ export default function AdminDashboard() {
   }, [selectedSite, router]);
 
   useEffect(() => { fetchData(true); }, [fetchData]);
+
+  // Traffic polling (faster)
+  useEffect(() => {
+    const fetchTraffic = async () => {
+      try {
+        const res = await fetch(`/api/admin/router/traffic?siteId=${selectedSite}`, {
+          headers: { 'ngrok-skip-browser-warning': 'true', 'Bypass-Tunnel-Reminder': 'true' }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setLiveTraffic({ rx: data.rx, tx: data.tx });
+        }
+      } catch (e) {}
+    };
+
+    const int = setInterval(fetchTraffic, 3000);
+    fetchTraffic();
+    return () => clearInterval(int);
+  }, [selectedSite]);
+
   useEffect(() => {
     const int = setInterval(() => fetchData(false), 20000);
     return () => clearInterval(int);
@@ -293,12 +339,20 @@ export default function AdminDashboard() {
   const handleResendVoucherByRef = async (ref: string, phone: string) => {
     if (!confirm(`Resend voucher to ${phone}?`)) return;
     try {
-        await fetch(`/api/admin/resend?reference=${ref}`, {
+        const res = await fetch(`/api/admin/resend?reference=${ref}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
         });
-        alert("Resend triggered.");
-    } catch (e) {}
+        if (res.status === 404) {
+            alert("❌ Feature 'Resend' not yet implemented on this server.");
+        } else if (res.ok) {
+            alert("✅ Resend triggered.");
+        } else {
+            alert("❌ Resend failed.");
+        }
+    } catch (e) {
+        alert("❌ Network error while attempting to resend.");
+    }
   };
 
   const handleDeleteOffer = async (id: string) => {
@@ -353,138 +407,138 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-[#0a0c10] text-gray-100 p-6 font-sans selection:bg-indigo-500/30">
       <div className="max-w-[1600px] mx-auto">
         {/* HEADER SECTION */}
-      <header className="mb-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 no-print">
-        <div className="flex items-center gap-5">
-          <div className="p-3.5 bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-2xl shadow-xl shadow-indigo-500/20">
-            <LayoutDashboard className="w-8 h-8 text-white" />
-          </div>
-          <div>
-            <h1 className="text-3xl font-black text-white uppercase tracking-tighter">STARLINKNET <span className="text-indigo-500">WIFI</span></h1>
-            <div className="flex items-center gap-3 mt-1">
-                <select
-                  value={selectedSite}
-                  onChange={(e) => setSelectedSite(e.target.value)}
-                  className="bg-gray-900 border border-gray-800 rounded-lg px-2 py-0.5 text-[9px] font-black uppercase text-indigo-400 outline-none focus:border-indigo-500 cursor-pointer"
-                >
-                    <option value="default-site">Main Operations</option>
-                    {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-                <button onClick={() => setShowSiteForm(!showSiteForm)} className="text-[9px] text-gray-500 hover:text-white uppercase font-black tracking-widest flex items-center gap-1">
-                    <Plus className="w-2.5 h-2.5" /> Site
-                </button>
-                <div className="w-px h-3 bg-gray-800" />
-                <button onClick={() => setShowGlobal(!showGlobal)} className={`text-[9px] uppercase font-black tracking-widest flex items-center gap-1.5 ${showGlobal ? 'text-indigo-400' : 'text-gray-500 hover:text-white'}`}>
-                    <Globe className="w-3 h-3" /> Global View
-                </button>
-                <div className="w-px h-3 bg-gray-800" />
-                <p className="text-[9px] text-gray-500 font-bold uppercase tracking-widest flex items-center gap-1.5">
-                    <span className={`w-1.5 h-1.5 rounded-full ${routerInfo.isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
-                    {routerInfo.isOnline ? 'Live Link' : 'System Offline'}
-                </p>
-                <button
-                  onClick={async () => {
-                    addLog("Starting Connection Test...");
-                    try {
-                      const res = await fetch(`/api/admin/router/test-connection?siteId=${selectedSite}&t=${Date.now()}`);
-                      const data = await res.json();
-
-                      if (data.success) {
-                        addLog("✅ Connection Success!");
-                        alert(`✅ ${data.message || 'Connected!'}\n\nHost: ${data.configUsed?.host}\nMode: ${data.configUsed?.mode}`);
-                      } else {
-                        addLog(`❌ Fail: ${data.error}`);
-                        let msg = `❌ Connection Failed\n\nError: ${data.error}\n\nTip: ${data.tip}`;
-                        if (data.error?.includes("AUTH_FAILED")) {
-                            msg = `⚠️ PASSWORD MISMATCH\n\nYour router is rejecting the login.\n\nFIX: Run this in MikroTik Terminal:\n/user set admin password=Hazy.123`;
-                        }
-                        alert(msg);
-
-                        // Run diagnostics if failed
-                        try {
-                          addLog("Running port diagnostics...");
-                          const portRes = await fetch(`/api/admin/router/debug-port?host=${data.configUsed?.host}&port=${data.configUsed?.port}`);
-                          const portData = await portRes.json();
-                          addLog(`Port Debug: ${portData.message}`);
-                        } catch (e) {}
-                      }
-                      fetchData(false);
-                    } catch (err) {
-                      addLog("❌ API unreachable");
-                      alert("❌ Could not reach the API service. Make sure Next.js is running.");
-                    }
-                  }}
-                  className="text-[8px] bg-gray-800 hover:bg-gray-700 px-2 py-0.5 rounded border border-gray-700 font-black uppercase text-indigo-400 ml-2"
-                >
-                  Test Connection
-                </button>
+        <header className="mb-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 no-print">
+          <div className="flex items-center gap-5">
+            <div className="p-3.5 bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-2xl shadow-xl shadow-indigo-500/20">
+              <LayoutDashboard className="w-8 h-8 text-white" />
             </div>
-            {/* DEBUG CONSOLE */}
-            {debugLog.length > 0 && (
-                <div className="mt-4 p-3 bg-black/80 rounded-xl border border-indigo-500/20 font-mono text-[9px] text-indigo-300">
-                    <div className="flex justify-between items-center mb-1">
-                        <span className="uppercase font-black text-indigo-500">System Logs</span>
-                        <button onClick={() => setDebugLog([])} className="text-gray-500 hover:text-white">Clear</button>
-                    </div>
-                    {debugLog.map((log, i) => <div key={i} className="mb-0.5 opacity-80">{`> ${log}`}</div>)}
-                </div>
-            )}
-          </div>
-        </div>
+            <div>
+              <h1 className="text-3xl font-black text-white uppercase tracking-tighter">STARLINKNET <span className="text-indigo-500">WIFI</span></h1>
+              <div className="flex items-center gap-3 mt-1">
+                  <select
+                    value={selectedSite}
+                    onChange={(e) => setSelectedSite(e.target.value)}
+                    className="bg-gray-900 border border-gray-800 rounded-lg px-2 py-0.5 text-[9px] font-black uppercase text-indigo-400 outline-none focus:border-indigo-500 cursor-pointer"
+                  >
+                      <option value="default-site">Main Operations</option>
+                      {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                  <button onClick={() => setShowSiteForm(!showSiteForm)} className="text-[9px] text-gray-500 hover:text-white uppercase font-black tracking-widest flex items-center gap-1">
+                      <Plus className="w-2.5 h-2.5" /> Site
+                  </button>
+                  <div className="w-px h-3 bg-gray-800" />
+                  <button onClick={() => setShowGlobal(!showGlobal)} className={`text-[9px] uppercase font-black tracking-widest flex items-center gap-1.5 ${showGlobal ? 'text-indigo-400' : 'text-gray-500 hover:text-white'}`}>
+                      <Globe className="w-3 h-3" /> Global View
+                  </button>
+                  <div className="w-px h-3 bg-gray-800" />
+                  <p className="text-[9px] text-gray-500 font-bold uppercase tracking-widest flex items-center gap-1.5">
+                      <span className={`w-1.5 h-1.5 rounded-full ${routerInfo.isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
+                      {routerInfo.isOnline ? 'Live Link' : 'System Offline'}
+                  </p>
+                  <button
+                    onClick={async () => {
+                      addLog("Starting Connection Test...");
+                      try {
+                        const res = await fetch(`/api/admin/router/test-connection?siteId=${selectedSite}&t=${Date.now()}`);
+                        const data = await res.json();
 
-        <div className="flex items-center gap-4 w-full md:w-auto">
-          <div className="flex-1 md:flex-none flex gap-6 px-6 py-3 bg-[#11141b] rounded-2xl border border-gray-800 shadow-inner">
-             <div><p className="text-[8px] text-gray-500 font-black uppercase tracking-widest mb-0.5">Net Revenue</p><p className="text-sm font-black text-emerald-400">KES {metrics.totalRevenue || 0}</p></div>
-             <div className="w-px bg-gray-800" />
-             <div><p className="text-[8px] text-gray-500 font-black uppercase tracking-widest mb-0.5">Leases</p><p className="text-sm font-black text-indigo-400">{activeSessions.length}</p></div>
-          </div>
-          <button onClick={handleBroadcast} className="bg-amber-600/10 hover:bg-amber-600 text-amber-500 hover:text-white p-3.5 rounded-xl border border-amber-500/20 transition-all group" title="Bulk WhatsApp Broadcast">
-            <MessageSquare className="w-5 h-5" />
-          </button>
-          <button onClick={() => setShowBulkScreen(!showBulkScreen)} className="bg-gray-800 p-3.5 rounded-xl hover:bg-gray-700 transition-all border border-gray-700 group">
-            {showBulkScreen ? <LayoutDashboard className="w-5 h-5 text-gray-400 group-hover:text-white" /> : <Printer className="w-5 h-5 text-gray-400 group-hover:text-white" />}
-          </button>
-          <button onClick={() => router.push('/admin/login')} className="bg-[#1a1d25] p-3.5 rounded-xl hover:text-red-400 transition-colors border border-gray-800"><LogOut className="w-5 h-5" /></button>
-        </div>
-      </header>
+                        if (data.success) {
+                          addLog("✅ Connection Success!");
+                          alert(`✅ ${data.message || 'Connected!'}\n\nHost: ${data.configUsed?.host}\nMode: ${data.configUsed?.mode}`);
+                        } else {
+                          addLog(`❌ Fail: ${data.error}`);
+                          let msg = `❌ Connection Failed\n\nError: ${data.error}\n\nTip: ${data.tip}`;
+                          if (data.error?.includes("AUTH_FAILED")) {
+                              msg = `⚠️ PASSWORD MISMATCH\n\nYour router is rejecting the login.\n\nFIX: Run this in MikroTik Terminal:\n/user set admin password=Hazy.123`;
+                          }
+                          alert(msg);
 
-      {showSiteForm && (
-          <div className="mb-8 p-6 bg-gray-900/50 rounded-3xl border border-gray-800 animate-in slide-in-from-top-4 duration-300">
-              <h3 className="text-xs font-black uppercase tracking-widest text-indigo-400 mb-4 flex items-center gap-2"><Globe className="w-3 h-3" /> Register New Deployment Site</h3>
-              <form onSubmit={handleAddSite} className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                  <input type="text" placeholder="Site Name" className="bg-black/40 border border-gray-800 p-3 rounded-xl text-xs" value={newSite.name} onChange={e=>setNewSite({...newSite, name:e.target.value})} required />
-                  <input type="text" placeholder="Location" className="bg-black/40 border border-gray-800 p-3 rounded-xl text-xs" value={newSite.location} onChange={e=>setNewSite({...newSite, location:e.target.value})} />
-                  <input type="text" placeholder="Router IP/Host" className="bg-black/40 border border-gray-800 p-3 rounded-xl text-xs" value={newSite.routerHost} onChange={e=>setNewSite({...newSite, routerHost:e.target.value})} required />
-                  <input type="text" placeholder="Router User" className="bg-black/40 border border-gray-800 p-3 rounded-xl text-xs" value={newSite.routerUser} onChange={e=>setNewSite({...newSite, routerUser:e.target.value})} />
-                  <button type="submit" disabled={actionLoading} className="bg-indigo-600 hover:bg-indigo-500 p-3 rounded-xl text-[10px] font-black uppercase">Add Site</button>
-              </form>
-          </div>
-      )}
-
-      {showGlobal && (
-          <div className="mb-10 grid grid-cols-1 md:grid-cols-4 gap-4 animate-in slide-in-from-top-6 duration-500">
-              <div className="md:col-span-1 bg-gradient-to-br from-indigo-900/40 to-black border border-indigo-500/20 p-6 rounded-3xl">
-                  <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-1">Network-Wide Revenue</p>
-                  <p className="text-3xl font-black text-white">KES {globalStats?.totalRevenue || 0}</p>
-                  <p className="text-[9px] text-gray-500 font-bold mt-2 uppercase">All Sites Combined</p>
+                          // Run diagnostics if failed
+                          try {
+                            addLog("Running port diagnostics...");
+                            const portRes = await fetch(`/api/admin/router/debug-port?host=${data.configUsed?.host}&port=${data.configUsed?.port}`);
+                            const portData = await portRes.json();
+                            addLog(`Port Debug: ${portData.message}`);
+                          } catch (e) {}
+                        }
+                        fetchData(false);
+                      } catch (err) {
+                        addLog("❌ API unreachable");
+                        alert("❌ Could not reach the API service. Make sure Next.js is running.");
+                      }
+                    }}
+                    className="text-[8px] bg-gray-800 hover:bg-gray-700 px-2 py-0.5 rounded border border-gray-700 font-black uppercase text-indigo-400 ml-2"
+                  >
+                    Test Connection
+                  </button>
               </div>
-              <div className="md:col-span-3 bg-[#11141b] border border-gray-800 p-6 rounded-3xl flex items-center gap-8 overflow-x-auto">
-                  {globalStats?.sites?.map((s: any) => (
-                      <div key={s.id} className="min-w-[150px]">
-                          <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">{s.name}</p>
-                          <p className="text-lg font-black text-white">KES {s.revenue}</p>
-                          <div className="flex items-center gap-2 mt-1">
-                              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                              <p className="text-[8px] font-bold text-gray-400 uppercase">{s.activeUsers} Active</p>
-                          </div>
+              {/* DEBUG CONSOLE */}
+              {debugLog.length > 0 && (
+                  <div className="mt-4 p-3 bg-black/80 rounded-xl border border-indigo-500/20 font-mono text-[9px] text-indigo-300">
+                      <div className="flex justify-between items-center mb-1">
+                          <span className="uppercase font-black text-indigo-500">System Logs</span>
+                          <button onClick={() => setDebugLog([])} className="text-gray-500 hover:text-white">Clear</button>
                       </div>
-                  ))}
-              </div>
+                      {debugLog.map((log, i) => <div key={i} className="mb-0.5 opacity-80">{`> ${log}`}</div>)}
+                  </div>
+              )}
+            </div>
           </div>
-      )}
 
-      {!showBulkScreen ? (
-        <div className="space-y-8 animate-in fade-in duration-700">
-          {/* --- REVENUE & NETWORK STATS --- */}
+          <div className="flex items-center gap-4 w-full md:w-auto">
+            <div className="flex-1 md:flex-none flex gap-6 px-6 py-3 bg-[#11141b] rounded-2xl border border-gray-800 shadow-inner">
+               <div><p className="text-[8px] text-gray-500 font-black uppercase tracking-widest mb-0.5">Net Revenue</p><p className="text-sm font-black text-emerald-400">KES {metrics.totalRevenue || 0}</p></div>
+               <div className="w-px bg-gray-800" />
+               <div><p className="text-[8px] text-gray-500 font-black uppercase tracking-widest mb-0.5">Leases</p><p className="text-sm font-black text-indigo-400">{activeSessions.length}</p></div>
+            </div>
+            <button onClick={handleBroadcast} className="bg-amber-600/10 hover:bg-amber-600 text-amber-500 hover:text-white p-3.5 rounded-xl border border-amber-500/20 transition-all group" title="Bulk WhatsApp Broadcast">
+              <MessageSquare className="w-5 h-5" />
+            </button>
+            <button onClick={() => setShowBulkScreen(!showBulkScreen)} className="bg-gray-800 p-3.5 rounded-xl hover:bg-gray-700 transition-all border border-gray-700 group">
+              {showBulkScreen ? <LayoutDashboard className="w-5 h-5 text-gray-400 group-hover:text-white" /> : <Printer className="w-5 h-5 text-gray-400 group-hover:text-white" />}
+            </button>
+            <button onClick={() => router.push('/admin/login')} className="bg-[#1a1d25] p-3.5 rounded-xl hover:text-red-400 transition-colors border border-gray-800"><LogOut className="w-5 h-5" /></button>
+          </div>
+        </header>
+
+        {showSiteForm && (
+            <div className="mb-8 p-6 bg-gray-900/50 rounded-3xl border border-gray-800 animate-in slide-in-from-top-4 duration-300">
+                <h3 className="text-xs font-black uppercase tracking-widest text-indigo-400 mb-4 flex items-center gap-2"><Globe className="w-3 h-3" /> Register New Deployment Site</h3>
+                <form onSubmit={handleAddSite} className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                    <input type="text" placeholder="Site Name" className="bg-black/40 border border-gray-800 p-3 rounded-xl text-xs" value={newSite.name} onChange={e=>setNewSite({...newSite, name:e.target.value})} required />
+                    <input type="text" placeholder="Location" className="bg-black/40 border border-gray-800 p-3 rounded-xl text-xs" value={newSite.location} onChange={e=>setNewSite({...newSite, location:e.target.value})} />
+                    <input type="text" placeholder="Router IP/Host" className="bg-black/40 border border-gray-800 p-3 rounded-xl text-xs" value={newSite.routerHost} onChange={e=>setNewSite({...newSite, routerHost:e.target.value})} required />
+                    <input type="text" placeholder="Router User" className="bg-black/40 border border-gray-800 p-3 rounded-xl text-xs" value={newSite.routerUser} onChange={e=>setNewSite({...newSite, routerUser:e.target.value})} />
+                    <button type="submit" disabled={actionLoading} className="bg-indigo-600 hover:bg-indigo-500 p-3 rounded-xl text-[10px] font-black uppercase">Add Site</button>
+                </form>
+            </div>
+        )}
+
+        {showGlobal && (
+            <div className="mb-10 grid grid-cols-1 md:grid-cols-4 gap-4 animate-in slide-in-from-top-6 duration-500">
+                <div className="md:col-span-1 bg-gradient-to-br from-indigo-900/40 to-black border border-indigo-500/20 p-6 rounded-3xl">
+                    <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-1">Network-Wide Revenue</p>
+                    <p className="text-3xl font-black text-white">KES {globalStats?.totalRevenue || 0}</p>
+                    <p className="text-[9px] text-gray-500 font-bold mt-2 uppercase">All Sites Combined</p>
+                </div>
+                <div className="md:col-span-3 bg-[#11141b] border border-gray-800 p-6 rounded-3xl flex items-center gap-8 overflow-x-auto">
+                    {globalStats?.sites?.map((s: any) => (
+                        <div key={s.id} className="min-w-[150px]">
+                            <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">{s.name}</p>
+                            <p className="text-lg font-black text-white">KES {s.revenue}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                <p className="text-[8px] font-bold text-gray-400 uppercase">{s.activeUsers} Active</p>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        )}
+
+        {!showBulkScreen ? (
+          <div className="space-y-8 animate-in fade-in duration-700">
+            {/* --- REVENUE & NETWORK STATS --- */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="bg-gradient-to-br from-indigo-600 to-indigo-800 p-6 rounded-3xl text-white shadow-xl shadow-indigo-500/10 border border-white/5 relative overflow-hidden">
               <div className="relative z-10">
@@ -496,331 +550,287 @@ export default function AdminDashboard() {
             </div>
 
             <div className="bg-[#11141b] p-6 rounded-3xl border border-gray-800 shadow-lg relative overflow-hidden">
-               <div className="relative z-10">
-                <p className="text-[10px] text-gray-500 uppercase tracking-widest font-black">Active Performance</p>
-                <div className="mt-4 flex items-end gap-1 h-12">
-                  {analytics?.daily?.map((d: any, i: number) => (
-                    <div
-                      key={i}
-                      className="flex-1 bg-indigo-500/40 rounded-t-sm hover:bg-indigo-500 transition-all cursor-help relative group"
-                      style={{ height: `${Math.min(100, (d.revenue / 4000) * 100)}%` }}
-                    >
-                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-black text-white text-[8px] py-1 px-2 rounded opacity-0 group-hover:opacity-100 whitespace-nowrap z-50">
-                        {d.date}: KES {d.revenue}
-                      </div>
+               <div className="relative z-10 flex flex-col justify-between h-full">
+                  <div>
+                    <p className="text-[10px] text-gray-500 uppercase tracking-widest font-black">Visitor Traffic</p>
+                    <div className="flex items-end gap-2 mt-2">
+                        <h3 className="text-4xl font-black text-white">{connectionStats?.portalHits || 0}</h3>
+                        <Eye className="w-5 h-5 text-indigo-500 mb-1" />
                     </div>
-                  ))}
-                </div>
-                <p className="text-[10px] mt-2 text-gray-600 font-medium uppercase tracking-tighter">7-Day Revenue Trend</p>
-              </div>
+                  </div>
+                  <p className="text-[10px] mt-2 text-gray-600 font-medium uppercase tracking-tighter">Total Portal Hits (24H)</p>
+               </div>
             </div>
 
             <div className="bg-[#11141b] p-6 rounded-3xl border border-gray-800 shadow-lg group hover:border-indigo-500/30 transition-all">
-              <div className="flex justify-between items-start mb-4">
-                <p className="text-[10px] text-gray-500 uppercase tracking-widest font-black">Hardware Identity</p>
-                <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${routerInfo.isOnline ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>
-                  {routerInfo.isOnline ? 'System Linked' : 'Offline'}
-                </span>
-              </div>
-
-              <div className="space-y-4">
-                <div className="flex justify-between items-end">
-                  <div>
-                    <h4 className="text-xl font-black text-white">{routerInfo.boardName || 'Router'}</h4>
-                    <p className="text-[10px] text-gray-600 font-bold uppercase tracking-tighter">OS v{routerInfo.version || '7.1'}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[8px] text-gray-500 uppercase font-black">Uptime</p>
-                    <p className="text-xs font-black text-indigo-400">{routerInfo.uptime || '0s'}</p>
-                  </div>
+                <div className="flex justify-between items-start mb-4">
+                  <p className="text-[10px] text-gray-500 uppercase tracking-widest font-black">Hardware Identity</p>
+                  <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${routerInfo.isOnline ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>
+                    {routerInfo.isOnline ? 'System Linked' : 'Offline'}
+                  </span>
                 </div>
 
-                <div className="space-y-2">
-                  <div className="flex justify-between text-[8px] font-black uppercase text-gray-500">
-                    <span>CPU Load</span>
-                    <span className={routerInfo.cpu > 80 ? 'text-red-500' : 'text-emerald-500'}>{routerInfo.cpu}%</span>
-                  </div>
-                  <div className="w-full bg-gray-950 h-1.5 rounded-full overflow-hidden">
-                    <div className={`h-full transition-all duration-1000 ${routerInfo.cpu > 80 ? 'bg-red-500' : 'bg-indigo-500'}`} style={{ width: `${routerInfo.cpu}%` }} />
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 pt-2 border-t border-gray-800/50">
-                   <div className="flex-1">
-                     <p className="text-[8px] text-gray-600 uppercase font-black">RAM Available</p>
-                     <p className="text-xs font-black text-white">{routerInfo.memory || '0 MB'}</p>
-                   </div>
-                   <Activity className={`w-4 h-4 ${routerInfo.isOnline ? 'text-emerald-500 animate-pulse' : 'text-gray-700'}`} />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* --- SYSTEM HEALTH & TOOLS --- */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <button onClick={handleRunSpeedTest} className="bg-[#11141b] p-4 rounded-2xl border border-gray-800 hover:border-indigo-500/50 transition-all flex items-center gap-3">
-              <Zap className="w-5 h-5 text-amber-500" />
-              <div className="text-left">
-                <p className="text-[10px] font-black uppercase text-white">Speed Test</p>
-                <p className="text-[8px] text-gray-500 uppercase">Check Bandwidth</p>
-              </div>
-            </button>
-            <button onClick={handleScanSecurity} className="bg-[#11141b] p-4 rounded-2xl border border-gray-800 hover:border-red-500/50 transition-all flex items-center gap-3">
-              <ShieldAlert className="w-5 h-5 text-red-500" />
-              <div className="text-left">
-                <p className="text-[10px] font-black uppercase text-white">Airspace Scan</p>
-                <p className="text-[8px] text-gray-500 uppercase">Rogue AP Detection</p>
-              </div>
-            </button>
-            <button onClick={handleCreateBackup} className="bg-[#11141b] p-4 rounded-2xl border border-gray-800 hover:border-emerald-500/50 transition-all flex items-center gap-3">
-              <Database className="w-5 h-5 text-emerald-500" />
-              <div className="text-left">
-                <p className="text-[10px] font-black uppercase text-white">Cloud Backup</p>
-                <p className="text-[8px] text-gray-500 uppercase">Save Config</p>
-              </div>
-            </button>
-            <button onClick={handleReconcile} className="bg-[#11141b] p-4 rounded-2xl border border-gray-800 hover:border-indigo-500/50 transition-all flex items-center gap-3">
-              <ArrowUpRight className="w-5 h-5 text-indigo-500" />
-              <div className="text-left">
-                <p className="text-[10px] font-black uppercase text-white">Reconcile</p>
-                <p className="text-[8px] text-gray-500 uppercase">Manual Provision</p>
-              </div>
-            </button>
-          </div>
-
-          {/* PACKAGE OFFERS LIST */}
-          <div className="bg-[#11141b] p-6 rounded-3xl border border-gray-800 shadow-xl">
-            <h3 className="text-sm font-black uppercase tracking-widest text-white mb-6 flex items-center gap-2">
-              <span className="text-indigo-500 text-lg">📦</span> Manage Active Packages
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {offers.length === 0 ? (
-                <p className="col-span-full text-center py-8 text-gray-600 italic text-xs">No packages found. Create one using the form below.</p>
-              ) : (
-                offers.map((offer) => (
-                  <div key={offer.id} className="p-4 border border-gray-800 rounded-2xl bg-gray-900/40 shadow-sm flex flex-col justify-between group hover:border-indigo-500/30 transition-all">
+                <div className="space-y-4">
+                  <div className="flex justify-between items-end">
                     <div>
-                      <div className="flex justify-between items-start">
-                        <h4 className="font-bold text-lg text-gray-200 group-hover:text-indigo-400 transition-colors">{offer.name}</h4>
-                        <button
-                          onClick={() => setFormData({
-                            id: offer.id,
-                            name: offer.name,
-                            durationMin: String(offer.durationMin || 60),
-                            price: String(offer.price),
-                            download_limit: offer.download_limit || '5M',
-                            upload_limit: offer.upload_limit || '5M',
-                            data_limit_mb: String(offer.dataLimitMB || ''),
-                            max_devices: String(offer.max_devices || 1),
-                            expiry_mode: offer.expiry_mode || 'CONTINUOUS'
-                          })}
-                          className="text-[10px] text-indigo-400 hover:text-white font-black uppercase"
-                        >
-                          Edit
-                        </button>
-                      </div>
-                      <p className="text-sm text-gray-500">Duration: {offer.duration}</p>
-                      <p className="text-xl font-extrabold text-emerald-400 mt-2">KSh {offer.price}</p>
-                      <p className="text-[10px] text-gray-500 mt-1 uppercase font-black tracking-tighter">
-                        🚀 {offer.speedLimit || `${offer.uploadLimit}/${offer.downloadLimit}`} | 📱 {offer.max_devices} Dev | 💾 {offer.dataLimitMB ? `${offer.dataLimitMB}MB` : 'Unlimited'}
-                      </p>
+                      <h4 className="text-xl font-black text-white">{routerInfo.boardName || 'Router'}</h4>
+                      <p className="text-[10px] text-gray-600 font-bold uppercase tracking-tighter">OS v{routerInfo.version || '7.1'}</p>
                     </div>
-
-                    <button
-                      onClick={() => handleDeleteOffer(offer.id)}
-                      className="mt-4 w-full bg-red-950/20 text-red-500 hover:bg-red-600 hover:text-white transition-colors duration-150 py-2.5 rounded-xl text-[10px] font-black uppercase border border-red-500/10"
-                    >
-                      🗑️ Delete Package
-                    </button>
+                    <div className="text-right">
+                      <p className="text-[8px] text-gray-500 uppercase font-black">Uptime</p>
+                      <p className="text-xs font-black text-indigo-400">{routerInfo.uptime || '0s'}</p>
+                    </div>
                   </div>
-                ))
-              )}
-            </div>
-          </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-1 space-y-6">
-                <form onSubmit={handleCreateOffer} className="bg-[#11141b] p-6 rounded-3xl border border-gray-800 shadow-2xl relative overflow-hidden group text-xs">
-                    <div className="flex justify-between items-center mb-6 border-b border-gray-800 pb-3">
-                        <h3 className="text-sm font-black uppercase tracking-widest text-white">Package Architect</h3>
-                        {formData.id && (
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-[8px] font-black uppercase text-gray-500">
+                      <span>CPU Load</span>
+                      <span className={routerInfo.cpu > 80 ? 'text-red-500' : 'text-emerald-500'}>{routerInfo.cpu}%</span>
+                    </div>
+                    <div className="w-full bg-gray-950 h-1.5 rounded-full overflow-hidden">
+                      <div className={`h-full transition-all duration-1000 ${routerInfo.cpu > 80 ? 'bg-red-500' : 'bg-indigo-500'}`} style={{ width: `${routerInfo.cpu}%` }} />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 pt-2 border-t border-gray-800/50">
+                     <div className="flex-1">
+                       <p className="text-[8px] text-gray-600 uppercase font-black">WAN Traffic</p>
+                       <p className="text-[10px] font-black text-white">
+                         <span className="text-emerald-400">↓ {(liveTraffic.rx / 1000000).toFixed(1)} Mbps</span>
+                         <span className="mx-1 opacity-20">/</span>
+                         <span className="text-indigo-400">↑ {(liveTraffic.tx / 1000000).toFixed(1)} Mbps</span>
+                       </p>
+                     </div>
+                     <Activity className={`w-4 h-4 ${routerInfo.isOnline ? 'text-emerald-500 animate-pulse' : 'text-gray-700'}`} />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* --- SYSTEM HEALTH & TOOLS --- */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <button onClick={handleRunSpeedTest} className="bg-[#11141b] p-4 rounded-2xl border border-gray-800 hover:border-indigo-500/50 transition-all flex items-center gap-3">
+                <Zap className="w-5 h-5 text-amber-500" />
+                <div className="text-left">
+                  <p className="text-[10px] font-black uppercase text-white">Speed Test</p>
+                  <p className="text-[8px] text-gray-500 uppercase">Check Bandwidth</p>
+                </div>
+              </button>
+              <button onClick={handleScanSecurity} className="bg-[#11141b] p-4 rounded-2xl border border-gray-800 hover:border-red-500/50 transition-all flex items-center gap-3">
+                <ShieldAlert className="w-5 h-5 text-red-500" />
+                <div className="text-left">
+                  <p className="text-[10px] font-black uppercase text-white">Airspace Scan</p>
+                  <p className="text-[8px] text-gray-500 uppercase">Rogue AP Detection</p>
+                </div>
+              </button>
+              <button onClick={handleCreateBackup} className="bg-[#11141b] p-4 rounded-2xl border border-gray-800 hover:border-emerald-500/50 transition-all flex items-center gap-3">
+                <Database className="w-5 h-5 text-emerald-500" />
+                <div className="text-left">
+                  <p className="text-[10px] font-black uppercase text-white">Cloud Backup</p>
+                  <p className="text-[8px] text-gray-500 uppercase">Save Config</p>
+                </div>
+              </button>
+              <button onClick={handleReconcile} className="bg-[#11141b] p-4 rounded-2xl border border-gray-800 hover:border-indigo-500/50 transition-all flex items-center gap-3">
+                <ArrowUpRight className="w-5 h-5 text-indigo-500" />
+                <div className="text-left">
+                  <p className="text-[10px] font-black uppercase text-white">Reconcile</p>
+                  <p className="text-[8px] text-gray-500 uppercase">Manual Provision</p>
+                </div>
+              </button>
+            </div>
+
+            {/* PACKAGE OFFERS LIST */}
+            <div className="bg-[#11141b] p-6 rounded-3xl border border-gray-800 shadow-xl">
+              <h3 className="text-sm font-black uppercase tracking-widest text-white mb-6 flex items-center gap-2">
+                <span className="text-indigo-500 text-lg">📦</span> Manage Active Packages
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {offers.length === 0 ? (
+                  <p className="col-span-full text-center py-8 text-gray-600 italic text-xs">No packages found. Create one using the form below.</p>
+                ) : (
+                  offers.map((offer) => (
+                    <div key={offer.id} className="p-4 border border-gray-800 rounded-2xl bg-gray-900/40 shadow-sm flex flex-col justify-between group hover:border-indigo-500/30 transition-all">
+                      <div>
+                        <div className="flex justify-between items-start">
+                          <h4 className="font-bold text-lg text-gray-200 group-hover:text-indigo-400 transition-colors">{offer.name}</h4>
                           <button
-                            type="button"
-                            onClick={() => setFormData({ id: '', name: '', durationMin: '60', price: '', download_limit: '5M', upload_limit: '5M', data_limit_mb: '', max_devices: '1', expiry_mode: 'CONTINUOUS' })}
-                            className="text-[10px] text-gray-500 hover:text-white font-black uppercase"
+                            onClick={() => setFormData({
+                              id: offer.id,
+                              name: offer.name,
+                              durationMin: String(offer.durationMin || 60),
+                              price: String(offer.price),
+                              download_limit: offer.download_limit || '5M',
+                              upload_limit: offer.upload_limit || '5M',
+                              data_limit_mb: String(offer.dataLimitMB || ''),
+                              max_devices: String(offer.max_devices || 1),
+                              expiry_mode: offer.expiry_mode || 'CONTINUOUS'
+                            })}
+                            className="text-[10px] text-indigo-400 hover:text-white font-black uppercase"
                           >
-                            Cancel Edit
+                            Edit
                           </button>
-                        )}
-                    </div>
-                    <div className="space-y-4">
-                        <div className="space-y-1">
-                            <label className="text-[8px] text-gray-600 uppercase font-black ml-1">Plan Display Name</label>
-                            <input type="text" placeholder="e.g. 24HRS UNLIMITED" className="w-full bg-gray-950 border border-gray-800 p-3.5 rounded-2xl text-white outline-none focus:border-indigo-500 transition-all" value={formData.name} onChange={e=>setFormData({...formData, name:e.target.value})} required />
                         </div>
-                        <div className="grid grid-cols-2 gap-3">
-                            <div className="space-y-1">
-                                <label className="text-[8px] text-gray-600 uppercase font-black ml-1">Price (KES)</label>
-                                <input type="number" placeholder="50" className="w-full bg-gray-950 border border-gray-800 p-3.5 rounded-2xl text-white outline-none" value={formData.price} onChange={e=>setFormData({...formData, price:e.target.value})} required />
-                            </div>
-                            <div className="space-y-1">
-                                <label className="text-[8px] text-gray-600 uppercase font-black ml-1">Runtime (Mins)</label>
-                                <input type="number" placeholder="1440" className="w-full bg-gray-950 border border-gray-800 p-3.5 rounded-2xl text-white outline-none" value={formData.durationMin} onChange={e=>setFormData({...formData, durationMin:e.target.value})} required />
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                            <div className="space-y-1">
-                                <label className="text-[8px] text-gray-600 uppercase font-black ml-1">Download (e.g. 5M)</label>
-                                <input type="text" className="w-full bg-gray-950 border border-gray-800 p-3.5 rounded-2xl text-white outline-none" value={formData.download_limit} onChange={e=>setFormData({...formData, download_limit:e.target.value})} required />
-                            </div>
-                            <div className="space-y-1">
-                                <label className="text-[8px] text-gray-600 uppercase font-black ml-1">Upload (e.g. 2M)</label>
-                                <input type="text" className="w-full bg-gray-950 border border-gray-800 p-3.5 rounded-2xl text-white outline-none" value={formData.upload_limit} onChange={e=>setFormData({...formData, upload_limit:e.target.value})} required />
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                            <div className="space-y-1">
-                                <label className="text-[8px] text-indigo-400 uppercase font-black ml-1">Data Limit (MB)</label>
-                                <input type="number" placeholder="0 for Unlimited" className="w-full bg-gray-950 border border-gray-800 p-3.5 rounded-2xl text-white outline-none" value={formData.data_limit_mb} onChange={e=>setFormData({...formData, data_limit_mb:e.target.value})} />
-                            </div>
-                            <div className="space-y-1">
-                                <label className="text-[8px] text-indigo-400 uppercase font-black ml-1">Device Sharing</label>
-                                <select className="w-full bg-gray-950 border border-gray-800 p-3 rounded-2xl text-white outline-none" value={formData.max_devices} onChange={e=>setFormData({...formData, max_devices:e.target.value})}>
-                                    <option value="1">Solo Pass</option><option value="2">Duo Sharing</option><option value="5">Group/Office</option>
-                                </select>
-                            </div>
-                        </div>
-                        <button type="submit" disabled={actionLoading} className="w-full bg-indigo-600 hover:bg-indigo-500 p-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-indigo-900/20 transition-all">
-                          {formData.id ? 'UPDATE PACKAGE' : 'COMMIT TO CLOUD'}
-                        </button>
-                    </div>
-                </form>
+                        <p className="text-sm text-gray-500">Duration: {offer.duration}</p>
+                        <p className="text-xl font-extrabold text-emerald-400 mt-2">KSh {offer.price}</p>
+                        <p className="text-[10px] text-gray-500 mt-1 uppercase font-black tracking-tighter">
+                          🚀 {offer.speedLimit || `${offer.uploadLimit}/${offer.downloadLimit}`} | 📱 {offer.max_devices} Dev | 💾 {offer.dataLimitMB ? `${offer.dataLimitMB}MB` : 'Unlimited'}
+                        </p>
+                      </div>
 
-                <div className="bg-[#11141b] p-6 rounded-3xl border border-gray-800 shadow-xl">
-                    <h3 className="text-sm font-black uppercase text-white mb-6 flex items-center gap-2"><Zap className="w-4 h-4 text-amber-500" /> Network Broadcast</h3>
-                    <textarea className="w-full bg-gray-950 border border-gray-800 p-4 rounded-2xl text-xs text-white outline-none h-24 focus:border-amber-500 transition-all" placeholder="Enter urgent maintenance message..." value={systemSettings.bannerText} onChange={e => setSystemSettings({...systemSettings, bannerText: e.target.value})} />
-                    <button onClick={handleUpdateSettings} disabled={actionLoading} className="w-full bg-amber-600 hover:bg-amber-500 mt-3 p-3.5 rounded-2xl font-black text-[10px] uppercase shadow-lg shadow-amber-900/10 transition-all">Publish Live</button>
-                </div>
-
-                {/* DEVICE CONNECTIONS TRACKING */}
-                <div className="bg-[#11141b] p-8 rounded-3xl border border-gray-800 shadow-2xl">
-                    <div className="flex justify-between items-center mb-8">
-                        <h3 className="text-sm font-black flex items-center gap-2 uppercase text-white tracking-widest"><Wifi className="w-5 h-5 text-emerald-500" /> Device Connection Logs</h3>
-                        {connectionStats && (
-                            <div className="flex gap-4">
-                                <div className="text-right">
-                                    <p className="text-[7px] text-gray-500 uppercase font-black">Active Now</p>
-                                    <p className="text-xs font-black text-emerald-500">{connectionStats.activeConnections}</p>
-                                </div>
-                                <div className="text-right">
-                                    <p className="text-[7px] text-gray-500 uppercase font-black">Total Today</p>
-                                    <p className="text-xs font-black text-white">{connectionStats.totalConnections}</p>
-                                </div>
-                            </div>
-                        )}
+                      <button
+                        onClick={() => handleDeleteOffer(offer.id)}
+                        className="mt-4 w-full bg-red-950/20 text-red-500 hover:bg-red-600 hover:text-white transition-colors duration-150 py-2.5 rounded-xl text-[10px] font-black uppercase border border-red-500/10"
+                      >
+                        🗑️ Delete Package
+                      </button>
                     </div>
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left">
-                            <thead className="bg-gray-950/50 text-[9px] text-gray-600 uppercase font-black border-b border-gray-800">
-                                <tr>
-                                    <th className="p-4 tracking-widest">Device / MAC</th>
-                                    <th className="p-4 tracking-widest">IP Address</th>
-                                    <th className="p-4 tracking-widest">Voucher</th>
-                                    <th className="p-4 text-right tracking-widest">Connected</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-800/30">
-                                {deviceConnections?.map(d => (
-                                    <tr key={d.id} className="hover:bg-emerald-500/[0.03] transition-all">
-                                        <td className="p-4">
-                                            <p className="text-white font-bold">{d.deviceName || 'Unknown Device'}</p>
-                                            <p className="text-[8px] font-black opacity-40 uppercase tracking-tighter">{d.macAddress}</p>
-                                        </td>
-                                        <td className="p-4 text-gray-400 font-mono text-[10px]">{d.ipAddress}</td>
-                                        <td className="p-4 text-indigo-400 font-bold uppercase">{d.voucherCode || '—'}</td>
-                                        <td className="p-4 text-right text-gray-500 font-bold">{new Date(d.connectedAt).toLocaleTimeString()}</td>
-                                    </tr>
-                                ))}
-                                {deviceConnections.length === 0 && <tr><td colSpan={4} className="p-12 text-center text-gray-700 italic font-black uppercase tracking-[0.2em] text-[9px]">No recent device activity logged</td></tr>}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                {/* RECENT TRANSACTIONS */}
-                <div className="bg-[#11141b] p-8 rounded-3xl border border-gray-800 shadow-2xl">
-                    <h3 className="text-sm font-black flex items-center gap-2 uppercase text-white mb-8 tracking-widest"><TrendingUp className="w-5 h-5 text-indigo-500" /> Recent Transactions</h3>
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left">
-                            <thead className="bg-gray-950/50 text-[9px] text-gray-600 uppercase font-black border-b border-gray-800">
-                                <tr>
-                                    <th className="p-4 tracking-widest">Reference</th>
-                                    <th className="p-4 tracking-widest">Amount</th>
-                                    <th className="p-4 tracking-widest">Status</th>
-                                    <th className="p-4 text-right tracking-widest">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-800/30">
-                                {metrics.recentPayments?.map((p: any) => (
-                                    <tr key={p.id} className="hover:bg-indigo-500/[0.03] transition-all">
-                                        <td className="p-4">
-                                            <p className="text-white font-bold text-xs">{p.transactionRef || 'N/A'}</p>
-                                            <p className="text-[8px] font-black opacity-40 uppercase tracking-tighter">{p.phoneNumber || 'NO PHONE'}</p>
-                                        </td>
-                                        <td className="p-4 text-emerald-400 font-black">KES {p.amount}</td>
-                                        <td className="p-4">
-                                            <span className={`px-2 py-0.5 rounded-[4px] text-[8px] font-black uppercase ${p.status === 'active' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
-                                                {p.status}
-                                            </span>
-                                        </td>
-                                        <td className="p-4 text-right">
-                                            <button
-                                              onClick={() => handleResendVoucherByRef(p.transactionRef, p.phoneNumber)}
-                                              className="text-[9px] font-black uppercase text-indigo-400 hover:text-white"
-                                            >
-                                                Resend
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                                {(!metrics.recentPayments || metrics.recentPayments.length === 0) && <tr><td colSpan={4} className="p-12 text-center text-gray-700 italic font-black uppercase tracking-[0.2em] text-[9px]">No recent payments</td></tr>}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
+                  ))
+                )}
+              </div>
             </div>
 
-            <div className="lg:col-span-2 space-y-8 text-xs">
-                {/* ACTIVE SESSIONS TABLE */}
-                <div className="bg-[#11141b] p-8 rounded-3xl border border-gray-800 shadow-2xl min-h-[500px]">
-                    <h3 className="text-sm font-black flex items-center gap-2 uppercase text-white mb-8 tracking-widest"><Users className="w-5 h-5 text-indigo-500" /> Active Network Leases</h3>
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left">
-                            <thead className="bg-gray-950/50 text-[9px] text-gray-600 uppercase font-black border-b border-gray-800">
-                                <tr><th className="p-4 tracking-widest">Identity</th><th className="p-4 tracking-widest">Uptime</th><th className="p-4 tracking-widest">Package</th><th className="p-4 text-right tracking-widest">Actions</th></tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-800/30">
-                                {activeSessions?.map(s => (
-                                    <tr key={s.id} className="hover:bg-indigo-500/[0.03] transition-all">
-                                        <td className="p-4"><p className="text-indigo-400 font-bold text-sm">{s.voucherCode}</p><p className="text-[8px] font-black opacity-40 uppercase tracking-tighter">{s.macAddress}</p></td>
-                                        <td className="p-4 text-emerald-400 font-black tracking-widest uppercase">{s.uptime}</td>
-                                        <td className="p-4 text-gray-600 font-bold uppercase">{s.packageName}</td>
-                                        <td className="p-4 text-right flex gap-2 justify-end">
-                                            <button onClick={() => handleExtendTime(s.voucherCode)} className="bg-indigo-600/5 text-indigo-400 hover:bg-indigo-600 hover:text-white px-3 py-2 rounded-xl text-[9px] font-black uppercase transition-all">+TIME</button>
-                                            <button onClick={() => handleKickUser(s.voucherCode)} className="bg-red-600/5 text-red-500 hover:bg-red-600 hover:text-white px-3 py-2 rounded-xl text-[9px] font-black uppercase transition-all">KICK</button>
-                                        </td>
-                                    </tr>
-                                ))}
-                                {activeSessions.length === 0 && <tr><td colSpan={4} className="p-24 text-center text-gray-700 italic font-black uppercase tracking-[0.3em] text-[10px]">Awaiting Hardware Connections</td></tr>}
-                            </tbody>
-                        </table>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div className="lg:col-span-1 space-y-6">
+                  <form onSubmit={handleCreateOffer} className="bg-[#11141b] p-6 rounded-3xl border border-gray-800 shadow-2xl relative overflow-hidden group text-xs">
+                      <div className="flex justify-between items-center mb-6 border-b border-gray-800 pb-3">
+                          <h3 className="text-sm font-black uppercase tracking-widest text-white">Package Architect</h3>
+                          {formData.id && (
+                            <button
+                              type="button"
+                              onClick={() => setFormData({ id: '', name: '', durationMin: '60', price: '', download_limit: '5M', upload_limit: '5M', data_limit_mb: '', max_devices: '1', expiry_mode: 'CONTINUOUS' })}
+                              className="text-[10px] text-gray-500 hover:text-white font-black uppercase"
+                            >
+                              Cancel Edit
+                            </button>
+                          )}
+                      </div>
+                      <div className="space-y-4">
+                          <div className="space-y-1">
+                              <label className="text-[8px] text-gray-600 uppercase font-black ml-1">Plan Display Name</label>
+                              <input type="text" placeholder="e.g. 24HRS UNLIMITED" className="w-full bg-gray-950 border border-gray-800 p-3.5 rounded-2xl text-white outline-none focus:border-indigo-500 transition-all" value={formData.name} onChange={e=>setFormData({...formData, name:e.target.value})} required />
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                              <div className="space-y-1">
+                                  <label className="text-[8px] text-gray-600 uppercase font-black ml-1">Price (KES)</label>
+                                  <input type="number" placeholder="50" className="w-full bg-gray-950 border border-gray-800 p-3.5 rounded-2xl text-white outline-none" value={formData.price} onChange={e=>setFormData({...formData, price:e.target.value})} required />
+                              </div>
+                              <div className="space-y-1">
+                                  <label className="text-[8px] text-gray-600 uppercase font-black ml-1">Runtime (Mins)</label>
+                                  <input type="number" placeholder="1440" className="w-full bg-gray-950 border border-gray-800 p-3.5 rounded-2xl text-white outline-none" value={formData.durationMin} onChange={e=>setFormData({...formData, durationMin:e.target.value})} required />
+                              </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                              <div className="space-y-1">
+                                  <label className="text-[8px] text-gray-600 uppercase font-black ml-1">Download (e.g. 5M)</label>
+                                  <input type="text" className="w-full bg-gray-950 border border-gray-800 p-3.5 rounded-2xl text-white outline-none" value={formData.download_limit} onChange={e=>setFormData({...formData, download_limit:e.target.value})} required />
+                              </div>
+                              <div className="space-y-1">
+                                  <label className="text-[8px] text-gray-600 uppercase font-black ml-1">Upload (e.g. 2M)</label>
+                                  <input type="text" className="w-full bg-gray-950 border border-gray-800 p-3.5 rounded-2xl text-white outline-none" value={formData.upload_limit} onChange={e=>setFormData({...formData, upload_limit:e.target.value})} required />
+                              </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                              <div className="space-y-1">
+                                  <label className="text-[8px] text-indigo-400 uppercase font-black ml-1">Data Limit (MB)</label>
+                                  <input type="number" placeholder="0 for Unlimited" className="w-full bg-gray-950 border border-gray-800 p-3.5 rounded-2xl text-white outline-none" value={formData.data_limit_mb} onChange={e=>setFormData({...formData, data_limit_mb:e.target.value})} />
+                              </div>
+                              <div className="space-y-1">
+                                  <label className="text-[8px] text-indigo-400 uppercase font-black ml-1">Device Sharing</label>
+                                  <select className="w-full bg-gray-950 border border-gray-800 p-3 rounded-2xl text-white outline-none" value={formData.max_devices} onChange={e=>setFormData({...formData, max_devices:e.target.value})}>
+                                      <option value="1">Solo Pass</option><option value="2">Duo Sharing</option><option value="5">Group/Office</option>
+                                  </select>
+                              </div>
+                          </div>
+                          <button type="submit" disabled={actionLoading} className="w-full bg-indigo-600 hover:bg-indigo-500 p-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-indigo-900/20 transition-all">
+                            {formData.id ? 'UPDATE PACKAGE' : 'COMMIT TO CLOUD'}
+                          </button>
+                      </div>
+                  </form>
+
+                  <div className="bg-[#11141b] p-6 rounded-3xl border border-gray-800 shadow-xl">
+                <div className="flex justify-between items-center mb-6">
+                    <h3 className="text-sm font-black uppercase tracking-widest text-white flex items-center gap-2">
+                        <Activity className="w-4 h-4 text-indigo-500" /> ISP Stability (Ping)
+                    </h3>
+                    <div className="text-right">
+                        <p className="text-xs font-black text-white">{latencyLogs[0]?.latency || 0}ms</p>
+                        <p className="text-[7px] text-gray-500 uppercase font-black">Live Latency</p>
                     </div>
                 </div>
+                <div className="h-24 flex items-end gap-1 px-1">
+                    {latencyLogs.slice().reverse().map((log, i) => {
+                        const height = Math.min(100, (log.latency / 200) * 100);
+                        return (
+                            <div key={log.id} className="flex-1 bg-indigo-500/20 hover:bg-indigo-500/40 border-t-2 border-indigo-500 rounded-t-sm transition-all relative group" style={{ height: `${height}%` }}>
+                                <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-gray-900 text-[8px] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap border border-gray-800 font-black z-30">
+                                    {log.latency}ms
+                                </div>
+                            </div>
+                        );
+                    })}
+                    {latencyLogs.length === 0 && <div className="w-full h-full flex items-center justify-center text-gray-700 italic text-[9px] uppercase tracking-widest">Awaiting stability data...</div>}
+                </div>
+             </div>
+
+             <div className="bg-[#11141b] p-6 rounded-3xl border border-gray-800 shadow-xl">
+                      <h3 className="text-sm font-black uppercase text-white mb-6 flex items-center gap-2"><Zap className="w-4 h-4 text-amber-500" /> Network Broadcast</h3>
+                      <textarea className="w-full bg-gray-950 border border-gray-800 p-4 rounded-2xl text-xs text-white outline-none h-24 focus:border-amber-500 transition-all" placeholder="Enter urgent maintenance message..." value={systemSettings.bannerText} onChange={e => setSystemSettings({...systemSettings, bannerText: e.target.value})} />
+                      <button onClick={handleUpdateSettings} disabled={actionLoading} className="w-full bg-amber-600 hover:bg-amber-500 mt-3 p-3.5 rounded-2xl font-black text-[10px] uppercase shadow-lg shadow-amber-900/10 transition-all">Publish Live</button>
+                  </div>
+              </div>
+
+              <div className="lg:col-span-2 space-y-8 text-xs">
+                  {/* ACTIVE SESSIONS TABLE */}
+                  <div className="bg-[#11141b] p-8 rounded-3xl border border-gray-800 shadow-2xl min-h-[500px]">
+                      <h3 className="text-sm font-black flex items-center gap-2 uppercase text-white mb-8 tracking-widest"><Users className="w-5 h-5 text-indigo-500" /> Active Network Leases</h3>
+                      <div className="overflow-x-auto">
+                          <table className="w-full text-left">
+                              <thead className="bg-gray-950/50 text-[9px] text-gray-600 uppercase font-black border-b border-gray-800">
+                                  <tr><th className="p-4 tracking-widest">Identity</th><th className="p-4 tracking-widest">Uptime</th><th className="p-4 tracking-widest">Package</th><th className="p-4 text-right tracking-widest">Actions</th></tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-800/30">
+                                  {activeSessions?.map(s => (
+                                      <tr key={s.id} className="hover:bg-indigo-500/[0.03] transition-all">
+                                          <td className="p-4">
+                                              <div className="flex items-center gap-3">
+                                                  {s.voucherCode?.startsWith('TV-') ? <Monitor className="w-4 h-4 text-indigo-400" /> : <Smartphone className="w-4 h-4 text-gray-500" />}
+                                                  <div>
+                                                      <p className="text-indigo-400 font-bold text-sm">{s.voucherCode}</p>
+                                                      <p className="text-[8px] font-black opacity-40 uppercase tracking-tighter">{s.macAddress}</p>
+                                                  </div>
+                                              </div>
+                                          </td>
+                                          <td className="p-4 text-emerald-400 font-black tracking-widest uppercase">{s.uptime}</td>
+                                          <td className="p-4 text-gray-600 font-bold uppercase">{s.packageName}</td>
+                                          <td className="p-4 text-right flex gap-2 justify-end">
+                                              <button onClick={() => handleExtendTime(s.voucherCode)} className="bg-indigo-600/5 text-indigo-400 hover:bg-indigo-600 hover:text-white px-3 py-2 rounded-xl text-[9px] font-black uppercase transition-all">+TIME</button>
+                                              <button onClick={() => handleKickUser(s.voucherCode)} className="bg-red-600/5 text-red-500 hover:bg-red-600 hover:text-white px-3 py-2 rounded-xl text-[9px] font-black uppercase transition-all">KICK</button>
+                                          </td>
+                                      </tr>
+                                  ))}
+                                  {activeSessions.length === 0 && <tr><td colSpan={4} className="p-24 text-center text-gray-700 italic font-black uppercase tracking-[0.3em] text-[10px]">Awaiting Hardware Connections</td></tr>}
+                              </tbody>
+                          </table>
+                      </div>
+                  </div>
 
                 {/* DEVICE CONNECTIONS TRACKING */}
                 <div className="bg-[#11141b] p-8 rounded-3xl border border-gray-800 shadow-2xl">
                     <div className="flex justify-between items-center mb-8">
-                        <h3 className="text-sm font-black flex items-center gap-2 uppercase text-white tracking-widest"><Wifi className="w-5 h-5 text-emerald-500" /> Device Connection Logs</h3>
+                        <div className="flex items-center gap-6">
+                            <button
+                                onClick={() => setShowHistory(false)}
+                                className={`text-sm font-black uppercase tracking-widest flex items-center gap-2 ${!showHistory ? 'text-white border-b-2 border-indigo-500 pb-1' : 'text-gray-500 hover:text-white'}`}
+                            >
+                                <Wifi className="w-5 h-5 text-emerald-500" /> Active Now
+                            </button>
+                            <button
+                                onClick={() => setShowHistory(true)}
+                                className={`text-sm font-black uppercase tracking-widest flex items-center gap-2 ${showHistory ? 'text-white border-b-2 border-indigo-500 pb-1' : 'text-gray-500 hover:text-white'}`}
+                            >
+                                <Clock className="w-5 h-5 text-indigo-500" /> 24H History
+                            </button>
+                        </div>
                         {connectionStats && (
                             <div className="flex gap-4">
                                 <div className="text-right">
@@ -841,22 +851,45 @@ export default function AdminDashboard() {
                                     <th className="p-4 tracking-widest">Device / MAC</th>
                                     <th className="p-4 tracking-widest">IP Address</th>
                                     <th className="p-4 tracking-widest">Voucher</th>
-                                    <th className="p-4 text-right tracking-widest">Connected</th>
+                                    <th className="p-4 text-right tracking-widest">{showHistory ? 'Time / Duration' : 'Connected'}</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-800/30">
-                                {deviceConnections?.map(d => (
+                                {(showHistory ? connectionHistory : deviceConnections)?.map(d => (
                                     <tr key={d.id} className="hover:bg-emerald-500/[0.03] transition-all">
                                         <td className="p-4">
-                                            <p className="text-white font-bold">{d.deviceName || 'Unknown Device'}</p>
-                                            <p className="text-[8px] font-black opacity-40 uppercase tracking-tighter">{d.macAddress}</p>
+                                            <div className="flex items-center gap-2">
+                                                {d.status === 'PORTAL_HIT' ? <Eye className="w-3.5 h-3.5 text-amber-500" /> :
+                                                 d.deviceName?.includes('TV') ? <Monitor className="w-3.5 h-3.5 text-indigo-400" /> :
+                                                 d.deviceName?.includes('MOBILE') || d.deviceName?.includes('iPhone') || d.deviceName?.includes('Android') ? <Smartphone className="w-3.5 h-3.5 text-gray-500" /> :
+                                                 <Wifi className="w-3.5 h-3.5 text-gray-500" />}
+                                                <div>
+                                                    <p className="text-white font-bold">{d.deviceName || 'Unknown Device'}</p>
+                                                    <p className="text-[8px] font-black opacity-40 uppercase tracking-tighter">{d.macAddress}</p>
+                                                </div>
+                                            </div>
                                         </td>
                                         <td className="p-4 text-gray-400 font-mono text-[10px]">{d.ipAddress}</td>
-                                        <td className="p-4 text-indigo-400 font-bold uppercase">{d.voucherCode || '—'}</td>
-                                        <td className="p-4 text-right text-gray-500 font-bold">{new Date(d.connectedAt).toLocaleTimeString()}</td>
+                                        <td className="p-4">
+                                            {d.status === 'PORTAL_HIT' ? (
+                                                <span className="bg-amber-500/10 text-amber-500 px-2 py-0.5 rounded text-[8px] font-black uppercase">Visitor</span>
+                                            ) : (
+                                                <p className="text-indigo-400 font-bold uppercase">{d.voucherCode || '—'}</p>
+                                            )}
+                                        </td>
+                                        <td className="p-4 text-right text-gray-500 font-bold">
+                                            {showHistory ? (
+                                                <div>
+                                                    <p>{new Date(d.connectedAt).toLocaleTimeString()}</p>
+                                                    {d.sessionDuration && <p className="text-[7px] text-indigo-400 uppercase">{Math.floor(d.sessionDuration / 60)}m {d.sessionDuration % 60}s</p>}
+                                                </div>
+                                            ) : (
+                                                new Date(d.connectedAt).toLocaleTimeString()
+                                            )}
+                                        </td>
                                     </tr>
                                 ))}
-                                {deviceConnections.length === 0 && <tr><td colSpan={4} className="p-12 text-center text-gray-700 italic font-black uppercase tracking-[0.2em] text-[9px]">No recent device activity logged</td></tr>}
+                                {(showHistory ? connectionHistory : deviceConnections).length === 0 && <tr><td colSpan={4} className="p-12 text-center text-gray-700 italic font-black uppercase tracking-[0.2em] text-[10px]">No recent device activity logged</td></tr>}
                             </tbody>
                         </table>
                     </div>
@@ -903,68 +936,69 @@ export default function AdminDashboard() {
                         </table>
                     </div>
                 </div>
+              </div>
             </div>
           </div>
-        </div>
-      ) : (
-        <div className="bg-[#11141b] p-10 rounded-3xl border border-gray-800 shadow-2xl max-w-5xl mx-auto animate-in zoom-in text-xs">
-            <h2 className="text-2xl font-black mb-2 text-white uppercase tracking-tighter">Bulk Voucher Matrix</h2>
-            <form onSubmit={handleGenerateBulk} className="flex flex-col md:flex-row gap-6 bg-gray-950 p-8 rounded-3xl mb-10 border border-gray-800">
-                <div className="flex-1">
-                    <label className="text-[10px] text-gray-600 font-black uppercase mb-3 block">Plan Tier</label>
-                    <select className="w-full bg-[#1a1d25] border border-gray-800 p-4 rounded-2xl text-white outline-none focus:border-indigo-500" value={bulkGen.package_id} onChange={e => setBulkGen({...bulkGen, package_id: e.target.value})} required>
-                        <option value="">-- Choose Package --</option>
-                        {offers.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
-                    </select>
-                </div>
-                <div className="md:w-32">
-                    <label className="text-[10px] text-gray-600 font-black uppercase mb-3 block">Quantity</label>
-                    <input type="number" className="w-full bg-[#1a1d25] border border-gray-800 p-4 rounded-2xl text-white outline-none" value={bulkGen.batch_size} onChange={e => setBulkGen({...bulkGen, batch_size: e.target.value})} required />
-                </div>
-                <button type="submit" disabled={actionLoading} className="bg-indigo-600 hover:bg-indigo-500 px-10 rounded-2xl font-black uppercase text-[10px] h-[53px] self-end shadow-xl shadow-indigo-900/20">GENERATE</button>
-            </form>
+        ) : (
+          <div className="bg-[#11141b] p-10 rounded-3xl border border-gray-800 shadow-2xl max-w-5xl mx-auto animate-in zoom-in text-xs">
+              <h2 className="text-2xl font-black mb-2 text-white uppercase tracking-tighter">Bulk Voucher Matrix</h2>
+              <form onSubmit={handleGenerateBulk} className="flex flex-col md:flex-row gap-6 bg-gray-950 p-8 rounded-3xl mb-10 border border-gray-800">
+                  <div className="flex-1">
+                      <label className="text-[10px] text-gray-600 font-black uppercase mb-3 block">Plan Tier</label>
+                      <select className="w-full bg-[#1a1d25] border border-gray-800 p-4 rounded-2xl text-white outline-none focus:border-indigo-500" value={bulkGen.package_id} onChange={e => setBulkGen({...bulkGen, package_id: e.target.value})} required>
+                          <option value="">-- Choose Package --</option>
+                          {offers.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+                      </select>
+                  </div>
+                  <div className="md:w-32">
+                      <label className="text-[10px] text-gray-600 font-black uppercase mb-3 block">Quantity</label>
+                      <input type="number" className="w-full bg-[#1a1d25] border border-gray-800 p-4 rounded-2xl text-white outline-none" value={bulkGen.batch_size} onChange={e => setBulkGen({...bulkGen, batch_size: e.target.value})} required />
+                  </div>
+                  <button type="submit" disabled={actionLoading} className="bg-indigo-600 hover:bg-indigo-500 px-10 rounded-2xl font-black uppercase text-[10px] h-[53px] self-end shadow-xl shadow-indigo-900/20">GENERATE</button>
+              </form>
 
-            {generatedBatch.length > 0 && (
-                <div className="space-y-6">
-                    <div className="flex items-center justify-between no-print">
-                      <button onClick={() => window.print()} className="bg-emerald-600 hover:bg-emerald-500 px-8 py-3 rounded-2xl font-black uppercase text-[10px] shadow-lg shadow-emerald-900/10 transition-all flex items-center gap-2">
-                        <Printer className="w-4 h-4" /> Print Vouchers
-                      </button>
-                      <p className="text-[10px] text-gray-500 font-bold uppercase italic">Print preview shows professional branding</p>
-                    </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-8 bg-white rounded-3xl voucher-grid shadow-2xl overflow-hidden">
-                        {generatedBatch.map((v, i) => (
-                            <div key={i} className="border-2 border-dashed border-indigo-100 p-5 text-center rounded-2xl text-black voucher-card relative overflow-hidden bg-white">
-                                <div className="absolute top-0 right-0 p-1 bg-indigo-600 text-white text-[5px] font-black uppercase rounded-bl-lg">ORIGINAL</div>
-                                <p className="text-[8px] font-black text-indigo-600 uppercase tracking-widest mb-1">STARLINKNET.WIFI</p>
-                                <div className="w-8 h-8 bg-indigo-50/50 rounded-full mx-auto mb-2 flex items-center justify-center">
-                                  <Wifi className="w-3 h-3 text-indigo-300" />
-                                </div>
-                                <p className="text-sm font-bold text-gray-400 uppercase tracking-tighter mb-1">Access Code</p>
-                                <p className="text-2xl font-mono font-black border-y-2 border-indigo-50 my-2 py-3 tracking-widest text-indigo-900">{v.code}</p>
-                                <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
-                                  <p className="text-[7px] font-black text-gray-500 uppercase">{v.packageName}</p>
-                                  <p className="text-[7px] font-black text-indigo-500 uppercase">VALID 24H</p>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
-        </div>
-      )}
+              {generatedBatch.length > 0 && (
+                  <div className="space-y-6">
+                      <div className="flex items-center justify-between no-print">
+                        <button onClick={() => window.print()} className="bg-emerald-600 hover:bg-emerald-500 px-8 py-3 rounded-2xl font-black uppercase text-[10px] shadow-lg shadow-emerald-900/10 transition-all flex items-center gap-2">
+                          <Printer className="w-4 h-4" /> Print Vouchers
+                        </button>
+                        <p className="text-[10px] text-gray-500 font-bold uppercase italic">Print preview shows professional branding</p>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-8 bg-white rounded-3xl voucher-grid shadow-2xl overflow-hidden">
+                          {generatedBatch.map((v, i) => (
+                              <div key={i} className="border-2 border-dashed border-indigo-100 p-5 text-center rounded-2xl text-black voucher-card relative overflow-hidden bg-white">
+                                  <div className="absolute top-0 right-0 p-1 bg-indigo-600 text-white text-[5px] font-black uppercase rounded-bl-lg">ORIGINAL</div>
+                                  <p className="text-[8px] font-black text-indigo-600 uppercase tracking-widest mb-1">STARLINKNET.WIFI</p>
+                                  <div className="w-8 h-8 bg-indigo-50/50 rounded-full mx-auto mb-2 flex items-center justify-center">
+                                    <Wifi className="wifi-icon w-3 h-3 text-indigo-300" />
+                                  </div>
+                                  <p className="text-sm font-bold text-gray-400 uppercase tracking-tighter mb-1">Access Code</p>
+                                  <p className="text-2xl font-mono font-black border-y-2 border-indigo-50 my-2 py-3 tracking-widest text-indigo-900">{v.code}</p>
+                                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
+                                    <p className="text-[7px] font-black text-gray-500 uppercase">{v.packageName}</p>
+                                    <p className="text-[7px] font-black text-indigo-500 uppercase">VALID 24H</p>
+                                  </div>
+                              </div>
+                          ))}
+                      </div>
+                  </div>
+              )}
+          </div>
+        )}
 
-      <style jsx global>{`
-        body { background-color: #0a0c10 !important; margin: 0; padding: 0; }
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #1f2937; border-radius: 10px; }
-        @media print {
-          .no-print { display: none !important; }
-          body { background: white !important; color: black !important; padding: 0 !important; }
-          .voucher-grid { display: grid !important; grid-template-columns: repeat(4, 1fr) !important; gap: 10px !important; }
-          .voucher-card { border: 1px solid #ddd !important; break-inside: avoid; }
-        }
-      `}</style>
+        <style jsx global>{`
+          html, body { background-color: #0a0c10 !important; color: #f3f4f6 !important; margin: 0; padding: 0; }
+          .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+          .custom-scrollbar::-webkit-scrollbar-thumb { background: #1f2937; border-radius: 10px; }
+          @media print {
+            .no-print { display: none !important; }
+            body { background: white !important; color: black !important; padding: 0 !important; }
+            .voucher-grid { display: grid !important; grid-template-columns: repeat(4, 1fr) !important; gap: 10px !important; }
+            .voucher-card { border: 1px solid #ddd !important; break-inside: avoid; }
+          }
+        `}</style>
+      </div>
     </div>
   );
 }

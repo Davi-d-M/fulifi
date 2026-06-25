@@ -112,5 +112,15 @@ export const WIFI_BILLING_CATALOG: Record<string, WifiPackage> = {
     dataLimit: "Unlimited",
     detail: "Full Friday night to Sunday night",
     isOffer: true,
+  },
+  "offer_tv": {
+    id: "offer_tv",
+    name: "📺 Smart TV Special",
+    price: 60,
+    durationHours: 12,
+    speedLimit: "15Mbps",
+    dataLimit: "Unlimited",
+    detail: "Optimized for Netflix, YouTube & 4K Streaming on your TV",
+    isOffer: true,
   }
 };
