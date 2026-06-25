@@ -297,7 +297,7 @@ model WhitelistedDevice {
 
 model DeviceProfile {
   id            String    @id @default(cuid())
-  macAddress    String
+  macAddress    String    @unique
   ipAddress     String?
   deviceType    String?   // "iOS", "Android", "Windows", "Mac", "Unknown"
   deviceName    String?

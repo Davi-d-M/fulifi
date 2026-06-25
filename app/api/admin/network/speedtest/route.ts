@@ -1,12 +1,36 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getMikrotikTraffic } from '@/lib/mikrotik';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const { searchParams } = new URL(req.url);
+    const siteId = searchParams.get('siteId') || 'default-site';
+
+    // 1. Fetch live traffic from MikroTik (ether1 is usually WAN)
+    const traffic = await getMikrotikTraffic(siteId, 'ether1');
+
+    if (traffic) {
+        // Convert to Mbps (router returns bps)
+        const rxMbps = (parseInt(traffic['rx-bits-per-second']) / 1000000).toFixed(2);
+        const txMbps = (parseInt(traffic['tx-bits-per-second']) / 1000000).toFixed(2);
+
+        // 2. Save log for history
+        await prisma.speedTest.create({
+          data: {
+            download: parseFloat(rxMbps),
+            upload: parseFloat(txMbps),
+            ping: 0, // Ping is tracked in a separate route
+            isp: "MikroTik Live Monitor"
+          }
+        });
+    }
+
     const logs = await prisma.speedTest.findMany({
       orderBy: { createdAt: 'desc' },
       take: 20
     });
+
     return NextResponse.json(logs);
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -14,26 +38,6 @@ export async function GET() {
 }
 
 export async function POST() {
-  try {
-    // In a real production environment, we'd use 'speedtest-net' or similar
-    // For this implementation, we simulate the watchdog logging
-    // Usually triggered by a cron job or manual action
-
-    const simulatedDownload = (Math.random() * 50 + 10).toFixed(2);
-    const simulatedUpload = (Math.random() * 20 + 5).toFixed(2);
-    const simulatedPing = (Math.random() * 30 + 5).toFixed(0);
-
-    const log = await prisma.speedTest.create({
-      data: {
-        download: parseFloat(simulatedDownload),
-        upload: parseFloat(simulatedUpload),
-        ping: parseFloat(simulatedPing),
-        isp: "Starlink/Fiber Simulation"
-      }
-    });
-
-    return NextResponse.json(log);
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
+    // Keep POST for manual trigger compatibility, same logic as GET
+    return GET({} as any);
 }

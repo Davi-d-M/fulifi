@@ -49,7 +49,7 @@ export async function POST(req: Request) {
 
         const body = await req.json();
         // Update the global status store
-        global.routerHealthData = body;
+        (global as any).routerHealthData = body;
 
         return NextResponse.json({ success: true });
     } catch (e) {
