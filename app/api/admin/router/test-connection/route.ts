@@ -6,6 +6,21 @@ export async function GET(request: Request) {
   const siteId = searchParams.get('siteId') || 'default-site';
 
   try {
+    // 1. Check for Cloud Bridge Sync first (Local-to-Cloud push)
+    const heartbeats = (global as any).routerHeartbeats || {};
+    const siteData = heartbeats[siteId];
+    if (siteData) {
+      const lastSeen = new Date(siteData.lastSeen).getTime();
+      if (Date.now() - lastSeen < 45000) {
+        return NextResponse.json({
+          success: true,
+          message: `Connected via Cloud Bridge (Last Sync: ${Math.round((Date.now() - lastSeen)/1000)}s ago)`,
+          configUsed: { host: 'Cloud Push', port: 0, user: 'router-script', mode: 'CLOUD_BRIDGE' },
+          tip: "Your router is pushing data perfectly! Vouchers will be created automatically."
+        });
+      }
+    }
+
     const config = await getMikrotikConfig(siteId);
 
     console.log(`[Diagnostic] Testing connection to ${config.host}:${config.port}`);

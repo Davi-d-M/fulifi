@@ -237,8 +237,23 @@ async function terminateMikrotikSession(voucherCode: string, siteId?: string) {
 
 async function testMikrotikConnection(siteId?: string) {
   const config = await getMikrotikConfig(siteId);
+  const currentSiteId = siteId || 'default-site';
 
-  console.log(`[MikroTik] Diagnostic check to ${config.host}:${config.port} (Site: ${siteId || 'default'})`);
+  // 1. Check for Cloud Bridge Sync first (Local-to-Cloud push)
+  const heartbeats = (global as any).routerHeartbeats || {};
+  const siteData = heartbeats[currentSiteId];
+  if (siteData) {
+    const lastSeen = new Date(siteData.lastSeen).getTime();
+    if (Date.now() - lastSeen < 45000) {
+      return {
+        success: true,
+        message: `Connected via Cloud Bridge (Last Sync: ${Math.round((Date.now() - lastSeen)/1000)}s ago)`,
+        mode: 'CLOUD_BRIDGE'
+      };
+    }
+  }
+
+  console.log(`[MikroTik] Diagnostic check to ${config.host}:${config.port} (Site: ${currentSiteId})`);
 
   if (config.port === 80 || config.port === 443) {
       try {

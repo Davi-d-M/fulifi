@@ -1,25 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getMikrotikResources } from '@/lib/mikrotik';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const siteId = searchParams.get('siteId') || 'default-site';
 
-    // Add a small delay/retry logic for reliability
-    const resources = await getMikrotikResources(siteId).catch(() => null);
+    // Check for "pushed" data in global memory first (Cloud Bridge Mode)
+    const heartbeats = (global as any).routerHeartbeats || {};
+    const siteData = heartbeats[siteId];
 
-    if (resources) {
-      return NextResponse.json(resources);
+    if (siteData) {
+      // Check if data is fresh (within last 30 seconds)
+      const lastSeen = new Date(siteData.lastSeen).getTime();
+      const now = Date.now();
+
+      if (now - lastSeen < 30000) {
+          return NextResponse.json({
+              'cpu-load': siteData['cpu-load'] || 0,
+              'free-memory': siteData['free-memory'] || 0,
+              uptime: siteData.uptime || '0s',
+              name: 'MikroTik (Cloud Synced)',
+              boardName: siteData['board-name'] || 'RouterBoard',
+              version: siteData.version || '7.x',
+              isOnline: true
+          });
+      }
     }
 
-    // Fallback instead of 502 to keep dashboard clean
+    // Fallback if no fresh data found
     return NextResponse.json({
         'cpu-load': 0,
         'free-memory': 0,
         uptime: 'offline',
-        name: 'MikroTik (Connecting...)',
-        isOffline: true
+        name: 'MikroTik (Disconnected)',
+        isOffline: true,
+        isOnline: false
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
