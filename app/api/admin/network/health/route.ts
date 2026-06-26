@@ -1,34 +1,32 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getMikrotikResources, getMikrotikActiveSessions } from '@/lib/mikrotik';
+import { NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(req: NextRequest) {
+export async function GET(request: Request) {
   try {
-    const { searchParams } = new URL(req.url);
+    const { searchParams } = new URL(request.url);
     const siteId = searchParams.get('siteId') || 'default-site';
 
-    // Fetch real-time health data from the router
-    const [resources, sessions] = await Promise.all([
-      getMikrotikResources(siteId).catch(() => null),
-      getMikrotikActiveSessions(siteId).catch(() => [])
-    ]);
+    // 1. Get recent visitor profiles (last 24 hours)
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const visitorCount = await prisma.deviceProfile.count({
+      where: {
+        siteId,
+        lastSeen: { gte: twentyFourHoursAgo }
+      }
+    });
 
-    const healthData = {
-      isOnline: !!resources,
-      cpu: resources ? (parseInt(resources['cpu-load']) || 0) : 0,
-      memory: resources ? (parseInt(resources['free-memory']) / (1024 * 1024)).toFixed(1) : '0',
-      uptime: resources ? resources.uptime : 'offline',
-      activeUsers: sessions.length,
-      lastCheck: new Date().toISOString(),
-      status: resources ? 'Healthy' : 'Unreachable',
-      peripherals: [
-        { name: 'MikroTik Gateway', ip: '192.168.150.2', alive: !!resources },
-        { name: 'Wan Interface', ip: 'ISP', alive: !!resources }
-      ]
-    };
+    // 2. Get active alerts
+    const activeAlerts = await prisma.securityAlert.count({
+      where: { siteId, isResolved: false }
+    });
 
-    return NextResponse.json(healthData);
+    return NextResponse.json({
+      visitors: visitorCount,
+      activeAlerts: activeAlerts,
+      timestamp: new Date().toISOString()
+    });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
