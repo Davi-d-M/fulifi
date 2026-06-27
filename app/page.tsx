@@ -10,6 +10,7 @@ export default function PayPage() {
   const [selectedPlan, setSelectedPlan] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [tunnelBlocked, setTunnelBlocked] = useState(false);
   const [status, setStatus] = useState<{ success: boolean; message: string } | null>(null);
   const [isWaitingForPin, setIsWaitingForPin] = useState(false);
@@ -92,13 +93,21 @@ export default function PayPage() {
           return;
         }
 
-        const data = JSON.parse(text);
-        if (res.ok && Array.isArray(data)) {
-          setBundlePlans(data);
-          if (data.length > 0) setSelectedPlan(data[0]);
+        try {
+          const data = JSON.parse(text);
+          if (res.ok && Array.isArray(data)) {
+            setBundlePlans(data);
+            if (data.length > 0) setSelectedPlan(data[0]);
+          } else {
+            setError(data.error || "Failed to load plans");
+          }
+        } catch (e) {
+          console.error("JSON Parse Error:", text);
+          setError("Server returned an invalid response. Please refresh.");
         }
       } catch (err) {
         console.error("Plans fetch crash:", err);
+        setError("Could not connect to the billing server.");
       } finally {
         setFetching(false);
       }
@@ -385,6 +394,13 @@ export default function PayPage() {
             ) : (
               <>
                 <p style={{ textAlign: "center", color: "#6b7280", fontSize: "14px", marginBottom: "32px", fontWeight: "500" }}>Choose a plan and connect instantly</p>
+
+                {error && (
+                    <div style={{ backgroundColor: "#fef2f2", color: "#b91c1c", padding: "12px", borderRadius: "10px", marginBottom: "20px", fontSize: "12px", textAlign: "center", border: "1px solid #fee2e2" }}>
+                        ⚠️ {error}
+                        <button onClick={() => window.location.reload()} style={{ display: "block", margin: "8px auto 0", background: "#b91c1c", color: "white", border: "none", padding: "4px 12px", borderRadius: "6px", cursor: "pointer" }}>Retry</button>
+                    </div>
+                )}
 
                 <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "32px" }}>
                   {fetching ? <div style={{textAlign:"center"}}><div className="spinner" style={{width:"24px", height:"24px"}}></div></div> : bundlePlans.map((plan) => (
