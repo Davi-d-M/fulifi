@@ -26,6 +26,7 @@ export default function PayPage() {
   const [tvMac, setTvMac] = useState("");
   const [activeReference, setActiveReference] = useState<string | null>(null);
   const [systemBanner, setSystemBanner] = useState<{ text: string, type: string } | null>(null);
+  const [routerName, setRouterName] = useState("");
 
   // Router variables
   const [mac, setMac] = useState("");
@@ -164,6 +165,15 @@ export default function PayPage() {
       } catch (err) {}
     };
     fetchBanner();
+
+    const fetchRouterStatus = async () => {
+        try {
+            const res = await fetch(`/api/admin/router/test-connection?siteId=${urlSiteId}`);
+            const data = await res.json();
+            if (data.success) setRouterName(data.routerName);
+        } catch (e) {}
+    };
+    fetchRouterStatus();
 
     return () => {
       if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
@@ -435,6 +445,19 @@ export default function PayPage() {
         ) : (
           <>
             <h1 style={{ textAlign: "center", marginBottom: "8px", fontWeight: "900", color: "#111827", fontSize: "38px" }}>Starlinknet.<span style={{ color: "#4f46e5" }}>WIFI</span></h1>
+
+            {/* RESTORED: Hardware Handshake Display */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", marginBottom: "24px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "4px", backgroundColor: "#f0fdf4", padding: "5px 12px", borderRadius: "100px", border: "1px solid #bbf7d0" }}>
+                    <span style={{ width: "6px", height: "6px", backgroundColor: "#22c55e", borderRadius: "50%", display: "block" }}></span>
+                    <span style={{ fontSize: "10px", fontWeight: "950", color: "#166534", textTransform: "uppercase", letterSpacing: "0.5px" }}>Link Active</span>
+                </div>
+                {mac && (
+                    <div style={{ display: "flex", alignItems: "center", gap: "4px", backgroundColor: "#f8fafc", padding: "5px 12px", borderRadius: "100px", border: "1px solid #e2e8f0" }}>
+                        <span style={{ fontSize: "10px", fontWeight: "950", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px" }}>ID: {mac.replace(/:/g, '').substring(0, 6)}</span>
+                    </div>
+                )}
+            </div>
 
             {!mac && !isWaitingForPin && !status?.success && (
                 <div style={{ backgroundColor: "#fff7ed", border: "1px solid #ffedd5", padding: "16px", borderRadius: "12px", marginBottom: "24px", textAlign: "center" }}>
