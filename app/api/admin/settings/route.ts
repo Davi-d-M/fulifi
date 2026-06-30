@@ -3,10 +3,10 @@ import { prisma } from '@/lib/prisma';
 
 export async function GET() {
   try {
-    const settings = await prisma.systemSetting.findUnique({ where: { id: 'global' } });
+    const settings = await prisma.systemSetting.findUnique({ where: { id: 'global' } }).catch(() => null);
     return NextResponse.json(settings || { bannerText: "", bannerType: "info", blockTethering: false });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ bannerText: "", bannerType: "info", blockTethering: false });
   }
 }
 

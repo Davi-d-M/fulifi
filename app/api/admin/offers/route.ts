@@ -5,7 +5,12 @@ import { WIFI_BILLING_CATALOG } from '@/app/config/packages';
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const siteId = searchParams.get('siteId') || 'default-site';
+    let siteId = searchParams.get('siteId') || 'default-site';
+
+    // Fallback if MikroTik variable was not replaced
+    if (siteId.includes('$') || siteId.includes('identity')) {
+      siteId = 'default-site';
+    }
 
     const dbOffers = await prisma.voucherOffer.findMany({
       where: { siteId },

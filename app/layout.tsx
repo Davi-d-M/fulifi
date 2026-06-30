@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Starlinknet.WIFI WiFi",
-  description: "Starlinknet.WIFI WiFi Hotspot Billing System",
+  title: "Starlinknet.WIFI | Fast & Secure Hotspot",
+  description: "Starlinknet.WIFI & Starlinknet.WIFI 5G Hotspot Billing System",
 };
 
 export default function RootLayout({

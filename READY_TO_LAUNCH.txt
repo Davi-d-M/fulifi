@@ -33,11 +33,6 @@ Step 3: Go to /admin on your laptop to see the new dashboard.
 
 ═══════════════════════════════════════════════════════════════
 
-IS THE LAPTOP NEEDED?
-• Right now: Yes, it is the server.
-• In Production: No. We will move this to Vercel (Cloud)
-  so it works 24/7 even when your laptop is off.
-
 ═══════════════════════════════════════════════════════════════
 
 SYSTEM STATUS: ALL SYSTEMS GO 🚀

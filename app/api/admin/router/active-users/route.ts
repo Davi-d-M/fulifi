@@ -66,6 +66,7 @@ export async function GET(req: Request) {
         ipAddress: session.address,
         voucherCode: session.user,
         uptime: session.uptime,
+        timeLeft: session.timeLeft,
         bytesIn: session['bytes-in'],
         bytesOut: session['bytes-out'],
         packageName: payment?.offer?.name || (payment ? "Active Plan" : "Manual/Unknown")

@@ -12,7 +12,7 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => null);
     if (!body) return NextResponse.json({ error: "Invalid request data" }, { status: 400 });
 
-    const { phoneNumber, packageId, email, mac, ip, siteId } = body;
+    const { phoneNumber, packageId, email, mac, ip, siteId, linkLogin, linkOrig } = body;
 
     if (!packageId) {
       return NextResponse.json({ error: "Missing packageId" }, { status: 400 });
@@ -42,6 +42,13 @@ export async function POST(request: Request) {
     if (mac) callbackUrl.searchParams.set('mac', mac);
     if (ip) callbackUrl.searchParams.set('ip', ip);
     if (siteId) callbackUrl.searchParams.set('siteId', siteId);
+    if (linkLogin) callbackUrl.searchParams.set('link-login', linkLogin);
+    if (linkOrig) callbackUrl.searchParams.set('link-orig', linkOrig);
+
+    // Improved Email Logic: Ensure a valid email is ALWAYS passed to Paystack
+    const finalEmail = (email && email.includes('@'))
+      ? email
+      : `customer_${Math.floor(Math.random() * 1000000)}@starlinknet.wifi`;
 
     const paystackResponse = await fetch('https://api.paystack.co/transaction/initialize', {
       method: 'POST',
@@ -50,7 +57,7 @@ export async function POST(request: Request) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        email: email || `customer_${Date.now()}@starlinknet.wifi`,
+        email: finalEmail,
         amount: amountInMinorUnits,
         currency: "KES",
         metadata: {

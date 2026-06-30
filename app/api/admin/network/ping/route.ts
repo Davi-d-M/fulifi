@@ -8,7 +8,7 @@ export async function GET(req: Request) {
     const siteId = searchParams.get('siteId') || 'default-site';
 
     // Perform a live ping to a stable target (Google DNS)
-    const result = await pingDeviceFromRouter('8.8.8.8', siteId);
+    const result: any = await pingDeviceFromRouter('8.8.8.8', siteId);
 
     if (result.alive && result.avgRtt) {
         const ms = parseInt(result.avgRtt.replace('ms', ''));

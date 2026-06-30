@@ -198,7 +198,7 @@ curl -X PUT http://localhost:3000/api/device-connection \
       http-method=post \
       http-data="{\"macAddress\":\"$mac\",\"ipAddress\":\"$ip\",\"voucherCode\":\"$user\",\"deviceName\":\"MikroTik-Session\"}" \
       http-header-field="Content-Type: application/json"
-  } on-error={ :log error "FULIFI: Failed to log connection for $user" }
+  } on-error={ :log error "STARLINKNET: Failed to log connection for $user" }
 }
 ```
 
@@ -214,7 +214,7 @@ curl -X PUT http://localhost:3000/api/device-connection \
       http-method=put \
       http-data="{\"macAddress\":\"$mac\",\"ipAddress\":\"$ip\",\"status\":\"DISCONNECTED\"}" \
       http-header-field="Content-Type: application/json"
-  } on-error={ :log error "FULIFI: Failed to log disconnect for $mac" }
+  } on-error={ :log error "STARLINKNET: Failed to log disconnect for $mac" }
 }
 ```
 

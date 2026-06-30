@@ -20,12 +20,12 @@ export async function POST(request: Request) {
     });
 
     // 2. Update Router Hardware
-    const result = await setTetheringBlock(blockTethering, currentSiteId);
+    const result = await setTetheringBlock(blockTethering, currentSiteId) as any;
 
     if (result.success) {
       return NextResponse.json({ success: true, message: result.message });
     } else {
-      return NextResponse.json({ success: false, error: result.message }, { status: 500 });
+      return NextResponse.json({ success: false, error: result.message || result.error }, { status: 500 });
     }
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

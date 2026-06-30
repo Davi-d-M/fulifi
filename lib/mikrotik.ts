@@ -10,7 +10,8 @@ import {
     addLegacyVoucherTime,
     checkLegacyUserExists,
     executeLegacyCommand,
-    setLegacyTetheringBlock
+    setLegacyTetheringBlock,
+    banLegacyDevice
 } from './mikrotik-legacy';
 
 interface MikrotikConfig {
@@ -120,7 +121,10 @@ function getProfileName(packageId: string): string {
     'offer_weekend': '48-Hour-Pass',
     'offer_tv': 'Smart-TV-Pass'
   };
-  return profileMap[packageId] || '1-Hour-Pass';
+
+  // If it's a custom DB offer (CUID), we default to a standard profile
+  // and override the speed/time limits directly on the user record.
+  return profileMap[packageId] || 'default';
 }
 
 async function createMikrotikVoucher(
@@ -155,7 +159,8 @@ async function createMikrotikVoucher(
           server: 'hotspot1',
           comment: `STARLINKNET REST - ${new Date().toISOString()}`,
           'rate-limit': finalRateLimit,
-          'shared-users': String(finalMaxDevices)
+          'shared-users': String(finalMaxDevices),
+          'mac-address': macAddress || undefined // MAC BINDING: Locks voucher to this device
       };
 
       if (finalBytesTotal > 0) restBody['limit-bytes-total'] = String(finalBytesTotal);
@@ -202,6 +207,7 @@ async function getMikrotikActiveSessions(siteId?: string) {
           user: item.user,
           address: item.address,
           uptime: item.uptime,
+          timeLeft: item['session-time-left'],
           'mac-address': item['mac-address'],
           'bytes-in': item['bytes-in'],
           'bytes-out': item['bytes-out']
@@ -305,7 +311,23 @@ async function pingDeviceFromRouter(address: string, siteId?: string): Promise<{
 
 async function getMikrotikExport(siteId?: string) { return null; }
 async function scanForRogueAPs(siteId?: string) { return []; }
-async function banMikrotikDevice(macAddress: string, voucherCode: string, siteId?: string) { return { success: false, message: "Not implemented" }; }
+
+async function banMikrotikDevice(macAddress: string, siteId?: string) {
+    const config = await getMikrotikConfig(siteId);
+    try {
+        if (config.port === 80 || config.port === 443) {
+            await executeRestCommand('/ip/hotspot/ip-binding', 'POST', {
+                'mac-address': macAddress,
+                type: 'blocked',
+                comment: `BANNED_${macAddress}`
+            }, siteId);
+            return { success: true };
+        }
+    } catch (e: any) {}
+
+    return await banLegacyDevice(macAddress, siteId);
+}
+
 async function setTetheringBlock(enabled: boolean, siteId?: string) {
     try {
         const res = await setLegacyTetheringBlock(enabled, siteId);

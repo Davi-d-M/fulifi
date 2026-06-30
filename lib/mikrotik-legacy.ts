@@ -1,5 +1,5 @@
 // @ts-ignore
-import { Connection } from 'mikrotik';
+import * as MikroTik from 'mikrotik';
 import { getMikrotikConfig } from './mikrotik';
 
 /**
@@ -10,6 +10,8 @@ export async function executeLegacyCommand(command: string[], siteId?: string): 
     const hostIp = config.host.split(':')[0];
 
     return new Promise((resolve, reject) => {
+        // @ts-ignore
+        const Connection = MikroTik.Connection || MikroTik;
         const conn = new Connection(hostIp, config.username, config.password, {
             port: config.port,
             timeout: 10
@@ -121,6 +123,7 @@ export async function getLegacyActiveSessions(siteId?: string) {
             user: item.user,
             address: item.address,
             uptime: item.uptime,
+            timeLeft: item['session-time-left'],
             'mac-address': item['mac-address'],
             'bytes-in': item['bytes-in'],
             'bytes-out': item['bytes-out']
@@ -203,6 +206,21 @@ export async function setLegacyTetheringBlock(enabled: boolean, siteId?: string)
                 await executeLegacyCommand(['/ip/firewall/mangle/remove', `=.id=${rule['.id']}`], siteId);
             }
         }
+        return { success: true };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+}
+
+export async function banLegacyDevice(macAddress: string, siteId?: string) {
+    try {
+        const comment = `BANNED_${macAddress}`;
+        await executeLegacyCommand([
+            '/ip/hotspot/ip-binding/add',
+            `=mac-address=${macAddress}`,
+            '=type=blocked',
+            `=comment=${comment}`
+        ], siteId);
         return { success: true };
     } catch (e: any) {
         return { success: false, error: e.message };

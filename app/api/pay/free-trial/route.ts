@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { createMikrotikVoucher, activateHotspotSession } from '@/lib/mikrotik';
+import { sendWhatsAppVoucher } from '@/lib/whatsapp-service';
 
 export async function POST(req: NextRequest) {
   try {
@@ -10,84 +11,99 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Could not identify your device" }, { status: 400 });
     }
 
+    const cleanMac = mac.toUpperCase().replace(/[^A-F0-9]/g, "");
     const currentSiteId = siteId || 'default-site';
 
-    // 1. Permanent Device Check (One-time only trial)
-    // We use DeviceProfile to track if this MAC has EVER used a trial
-    const device = await prisma.deviceProfile.findFirst({
-      where: { macAddress: mac }
+    // 1. Hardened Device Check (SQLite Level)
+    const device = await prisma.deviceProfile.findUnique({
+      where: { macAddress: cleanMac }
     });
 
-    if (device && device.totalSpent === 0 && device.totalSessions > 0) {
-        // If they have sessions but no spending, they likely already used a trial
-        // To be even stricter, we can check a specific flag or the voucher history
+    if (device && device.trialUsed) {
+      return NextResponse.json({
+        error: "Free trial already used on this device. Please purchase a plan to continue."
+      }, { status: 403 });
     }
 
-    // Better check: Search for any existing trial payment or session
-    const usedTrial = await prisma.activeSession.findFirst({
-      where: {
-        macAddress: mac,
-        voucherCode: { startsWith: 'TRIAL-' }
+    // 2. Mark Trial as Used Immediately
+    await prisma.deviceProfile.upsert({
+      where: { macAddress: cleanMac },
+      update: { trialUsed: true, trialUsedAt: new Date(), totalSessions: { increment: 1 } },
+      create: {
+        macAddress: cleanMac,
+        ipAddress: ip,
+        trialUsed: true,
+        trialUsedAt: new Date(),
+        totalSessions: 1,
+        siteId: currentSiteId
       }
     });
 
-    if (usedTrial) {
-      return NextResponse.json({ error: "Free trial already used on this device. Please purchase a plan to continue." }, { status: 403 });
-    }
-
-    // 2. Create Trial Record
+    // 3. Provision 10-Min Trial on Router
     const trialCode = `TRIAL-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
-    const expiresAt = new Date();
-    expiresAt.setMinutes(expiresAt.getMinutes() + 10); // 10 Min Trial
+    console.log(`[Free Trial] Provisioning hardware-locked trial: ${trialCode}`);
 
-    // 3. Provision on Router
-    console.log(`[Free Trial] Provisioning ${trialCode} for MAC: ${mac}`);
     const routerResult = await createMikrotikVoucher(
       trialCode,
-      '1hr', // Using a fallback profile name
-      10,
+      '1hr', // Uses standard profile but we override limits
+      10,    // 10 Minutes strict
       'CONTINUOUS',
-      mac,
-      '2M/2M', // Trial speed is capped
+      cleanMac,
+      '2M/2M', // Capped speed for trial
       undefined, undefined, undefined, undefined,
       currentSiteId
     );
 
-    if (routerResult.success) {
-      // 4. Record the session to "Mark" this device permanently
-      try {
-          await prisma.activeSession.create({
-            data: {
-                macAddress: mac,
-                voucherCode: trialCode,
-                ipAddress: ip || '0.0.0.0',
-                expiresAt: expiresAt,
-                siteId: currentSiteId
-            }
-          });
-
-          // Also update/create a Device Profile to track this user
-          await prisma.deviceProfile.upsert({
-              where: { macAddress: mac },
-              update: { totalSessions: { increment: 1 } },
-              create: {
-                  macAddress: mac,
-                  ipAddress: ip,
-                  totalSessions: 1,
-                  siteId: currentSiteId
-              }
-          });
-      } catch (dbErr) {
-          console.warn("[Free Trial] Database recording failed, but voucher was created on router.");
-      }
-
-      // 5. Inject live session
-      await activateHotspotSession(mac, ip || '0.0.0.0', trialCode, currentSiteId).catch(() => {});
-
-      return NextResponse.json({ success: true, voucherCode: trialCode });
+    if (!routerResult.success) {
+        return NextResponse.json({ error: "Router failed to start trial." }, { status: 500 });
     }
 
-    return NextResponse.json({ error: "Router failed to start trial. Please try again later." }, { status: 500 });
+    // 4. Referral Reward Logic (The Gift Trigger)
+    const pendingRef = await prisma.referral.findUnique({
+        where: { refereeMac: cleanMac }
+    });
+
+    if (pendingRef && pendingRef.status === 'PENDING') {
+        const bonusCode = `GIFT-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+
+        // Create 30-min voucher for the referrer
+        const bonusResult = await createMikrotikVoucher(
+            bonusCode,
+            '1hr',
+            30,
+            'CONTINUOUS',
+            undefined, // No MAC lock for the gift voucher (let them use it on any device)
+            '5M/5M',
+            undefined, undefined, undefined, undefined,
+            currentSiteId
+        );
+
+        if (bonusResult.success) {
+            await prisma.referral.update({
+                where: { id: pendingRef.id },
+                data: { status: 'REWARDED', isClaimed: true }
+            });
+
+            // Notify Referrer via WhatsApp
+            const message = `🎁 *AWESOME NEWS!* 🎁\n\n` +
+                            `Someone just connected using your link! As a thank you, here is a *30-Minute High Speed* voucher code:\n\n` +
+                            `🎫 *Code:* ${bonusCode}\n\n` +
+                            `Thank you for growing Starlinknet.WIFI!`;
+
+            // Note: referrerVoucher might be a phone or a previous voucher.
+            // We assume it's the identifier for WhatsApp.
+            await fetch('http://localhost:4000/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phoneNumber: pendingRef.referrerVoucher, message })
+            }).catch(() => console.warn("[Trial] Referral notification failed."));
+        }
+    }
+
+    // 5. Activate & Login
+    await activateHotspotSession(cleanMac, ip || '0.0.0.0', trialCode, currentSiteId).catch(() => {});
+
+    return NextResponse.json({ success: true, voucherCode: trialCode });
 
   } catch (error: any) {
     console.error("[Free Trial Error]", error.message);

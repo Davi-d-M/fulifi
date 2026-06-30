@@ -4,18 +4,27 @@ import { createMikrotikVoucher } from '@/lib/mikrotik';
 
 export async function POST(request: Request) {
   try {
-    const { reference, siteId } = await request.json();
+    const { reference, siteId, forceByPhone } = await request.json();
     if (!reference) return NextResponse.json({ error: "Missing reference" }, { status: 400 });
 
     const currentSite = siteId || 'default-site';
 
     // 1. Find the payment
-    const payment = await prisma.payment.findUnique({
-      where: { transactionRef: reference },
-      include: { offer: true }
-    });
+    let payment;
+    if (forceByPhone) {
+        payment = await prisma.payment.findFirst({
+            where: { phoneNumber: reference, siteId: currentSite },
+            orderBy: { createdAt: 'desc' },
+            include: { offer: true }
+        });
+    } else {
+        payment = await prisma.payment.findUnique({
+            where: { transactionRef: reference },
+            include: { offer: true }
+        });
+    }
 
-    if (!payment) return NextResponse.json({ error: "Payment reference not found in database" }, { status: 404 });
+    if (!payment) return NextResponse.json({ error: "Payment record not found" }, { status: 404 });
 
     // 2. Force activate
     const voucherCode = (payment.voucherCode === 'PENDING' || !payment.voucherCode) ? `MANUAL-${Math.random().toString(36).substring(2, 8).toUpperCase()}` : payment.voucherCode;

@@ -71,7 +71,9 @@ export async function POST(request: Request) {
     const siteId = body.siteId || 'default-site';
 
     // Store heartbeat data in global memory
-    (global as any).routerHeartbeats[siteId] = {
+    const g = global as any;
+    g.routerHeartbeats = g.routerHeartbeats || {};
+    g.routerHeartbeats[siteId] = {
         ...body,
         lastSeen: new Date().toISOString(),
         isOnline: true

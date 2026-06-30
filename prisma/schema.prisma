@@ -1,7 +1,6 @@
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
 }
 
 generator client {
@@ -110,7 +109,7 @@ model BulkVoucher {
   isUsed      Boolean      @default(false)
   createdAt   DateTime     @default(now())
   siteId      String       @default("default-site")
-  site        Site         @relation(fields: [siteId], references: [id])
+  site         Site         @relation(fields: [siteId], references: [id])
 }
 
 model Site {
@@ -236,10 +235,10 @@ model SpeedTest {
 
 model Referral {
   id               String   @id @default(cuid())
-  referrerVoucher  String
-  referredPhone    String
+  referrerVoucher  String   // The voucher/identifier who shared
+  refereeMac       String   @unique // The new user's device
   rewardMinutes    Int      @default(30)
-  isClaimed        Boolean  @default(false)
+  status           String   @default("PENDING") // PENDING, REWARDED
   createdAt        DateTime @default(now())
 }
 
@@ -304,6 +303,8 @@ model DeviceProfile {
   deviceName    String?
   browserType   String?   // "Safari", "Chrome", "Firefox", etc
   osVersion     String?
+  trialUsed     Boolean   @default(false)
+  trialUsedAt   DateTime?
   totalSessions Int       @default(0)
   totalDataUsed Float     @default(0) // MB
   totalSpent    Float     @default(0) // KES

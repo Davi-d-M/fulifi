@@ -19,14 +19,14 @@ export function middleware(request: NextRequest) {
     }
   }
 
-  // Allow public access to GET /api/admin/offers so users can see plans
-  const isPublicGetOffers = url.pathname === '/api/admin/offers' && request.method === 'GET';
+  // Allow public access to GET /api/admin/offers and /api/admin/settings
+  const isPublicApi = (url.pathname === '/api/admin/offers' || url.pathname === '/api/admin/settings') && request.method === 'GET';
 
-  // Protect Admin API Routes (Allow login/logout/public GET offers)
+  // Protect Admin API Routes (Allow login/logout/public GET offers/settings)
   if (url.pathname.startsWith('/api/admin') &&
       !url.pathname.startsWith('/api/admin/login') &&
       !url.pathname.startsWith('/api/admin/logout') &&
-      !isPublicGetOffers) {
+      !isPublicApi) {
     if (!isAuthenticated) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
