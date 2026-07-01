@@ -4,8 +4,8 @@
     <meta charset="utf-8">
     <title>Starlinknet.WIFI - Redirecting</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <!-- Redirection to the live ngrok billing portal -->
-    <meta http-equiv="refresh" content="0; url=https://oil-cinnamon-starfish.ngrok-free.dev?mac=$(mac)&ip=$(ip)&siteId=$(identity)&link-login-only=$(link-login-only)&link-orig=$(link-orig)">
+    <!-- Redirection to the live Vercel billing portal -->
+    <meta http-equiv="refresh" content="0; url=https://fulifi-rr9u.vercel.app?mac=$(mac)&ip=$(ip)&siteId=$(identity)&link-login-only=$(link-login-only)&link-orig=$(link-orig)">
     <style>
         body {
             background: #0a0c10;
@@ -30,7 +30,7 @@
         h2 { font-size: 28px; font-weight: 900; margin-bottom: 12px; text-transform: uppercase; letter-spacing: -1px; }
         .spinner {
             border: 4px solid rgba(99, 102, 241, 0.1);
-            border-top: 4px solid #6366f1;
+            border-top: 4px solid #4f46e5;
             border-radius: 50%;
             width: 48px;
             height: 48px;
@@ -41,7 +41,7 @@
         p { color: #9ca3af; font-size: 15px; line-height: 1.6; margin-bottom: 32px; font-weight: 500; }
         .btn {
             display: block;
-            background: #6366f1;
+            background: #4f46e5;
             color: white;
             text-decoration: none;
             padding: 18px 24px;
@@ -51,30 +51,27 @@
             text-transform: uppercase;
             letter-spacing: 1.5px;
             transition: all 0.3s;
-            box-shadow: 0 10px 20px rgba(99, 102, 241, 0.2);
+            box-shadow: 0 10px 20px rgba(79, 70, 229, 0.2);
         }
-        .btn:hover { background: #4f46e5; transform: translateY(-2px); }
+        .btn:hover { background: #4338ca; transform: translateY(-2px); }
         .btn:active { transform: scale(0.96); }
     </style>
 </head>
 <body>
     <div class="box">
-        <h2>STARLINKNET.<span style="color:#6366f1">WIFI</span></h2>
+        <h2>STARLINKNET.<span style="color:#4f46e5">WIFI</span></h2>
         <div class="spinner"></div>
         <p>Syncing your device with our secure payment gateway. Please wait...</p>
 
-        <a href="https://oil-cinnamon-starfish.ngrok-free.dev?mac=$(mac)&ip=$(ip)&siteId=$(identity)&link-login-only=$(link-login-only)&link-orig=$(link-orig)" class="btn">
+        <a href="https://fulifi-rr9u.vercel.app?mac=$(mac)&ip=$(ip)&siteId=$(identity)&link-login-only=$(link-login-only)&link-orig=$(link-orig)" class="btn">
             Open Portal Manually
         </a>
     </div>
 
     <script>
         // Automatic redirection script
-        var portalUrl = "https://oil-cinnamon-starfish.ngrok-free.dev?mac=$(mac)&ip=$(ip)&siteId=$(identity)&link-login-only=$(link-login-only)&link-orig=$(link-orig)";
-
-        setTimeout(function() {
-            window.location.replace(portalUrl);
-        }, 1200);
+        var portalUrl = "https://fulifi-rr9u.vercel.app?mac=$(mac)&ip=$(ip)&siteId=$(identity)&link-login-only=$(link-login-only)&link-orig=$(link-orig)";
+        window.location.replace(portalUrl);
     </script>
 </body>
 </html>

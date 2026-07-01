@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
         if (bonusResult.success) {
             await prisma.referral.update({
                 where: { id: pendingRef.id },
-                data: { status: 'REWARDED', isClaimed: true }
+                data: { status: 'REWARDED' }
             });
 
             // Notify Referrer via WhatsApp

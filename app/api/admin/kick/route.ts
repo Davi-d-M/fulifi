@@ -15,7 +15,8 @@ export async function POST(request: Request) {
     if (result.success) {
       return NextResponse.json({ success: true, message: "User disconnected" });
     } else {
-      return NextResponse.json({ error: result.error || "Failed to disconnect" }, { status: 404 });
+      const err = result as any;
+      return NextResponse.json({ error: err.error || "Failed to disconnect" }, { status: 404 });
     }
   } catch (error: any) {
     console.error("Kick Error:", error);

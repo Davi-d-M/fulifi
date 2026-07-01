@@ -20,10 +20,10 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. Log the referral
-    const referral = await prisma.referral.create({
+    await prisma.referral.create({
       data: {
         referrerVoucher,
-        referredPhone,
+        refereeMac: 'MANUAL-' + Date.now(),
         rewardMinutes: 30
       }
     });

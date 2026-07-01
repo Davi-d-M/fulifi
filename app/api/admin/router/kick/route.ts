@@ -13,7 +13,8 @@ export async function POST(request: Request) {
     if (result.success) {
       return NextResponse.json({ success: true, message: "User disconnected" });
     } else {
-      return NextResponse.json({ success: false, error: result.error || "Failed to disconnect" }, { status: 500 });
+      const err = result as any;
+      return NextResponse.json({ success: false, error: err.error || "Failed to disconnect" }, { status: 500 });
     }
   } catch (error: unknown) {
     console.error("Kick User Error:", error);
