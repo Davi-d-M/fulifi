@@ -15,27 +15,54 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Missing identifier" }, { status: 400 });
     }
 
-    const payment = await prisma.payment.findFirst({
+    // 1. Check ActiveSession (Source of truth for "currently online" devices)
+    const session = await prisma.activeSession.findFirst({
       where: {
         OR: [
-          { voucherCode: identifier },
-          { phoneNumber: identifier }
+          { macAddress: identifier },
+          { voucherCode: identifier }
         ],
-        status: 'active',
         siteId: siteId
       },
-      include: { offer: true },
       orderBy: { createdAt: 'desc' }
     });
 
-    if (!payment) {
+    let targetExpiresAt: Date | null = null;
+    let targetPackageName = "Active Session";
+    let targetVoucherCode = "";
+
+    if (session) {
+        targetExpiresAt = new Date(session.expiresAt);
+        targetVoucherCode = session.voucherCode;
+    } else {
+        // 2. Fallback to Payment (for users who paid but haven't connected yet)
+        const payment = await prisma.payment.findFirst({
+          where: {
+            OR: [
+              { voucherCode: identifier },
+              { phoneNumber: identifier }
+            ],
+            status: 'active',
+            siteId: siteId
+          },
+          include: { offer: true },
+          orderBy: { createdAt: 'desc' }
+        });
+
+        if (payment) {
+            targetExpiresAt = new Date(payment.expiresAt);
+            targetVoucherCode = payment.voucherCode;
+            targetPackageName = payment.offer?.name || "Standard Plan";
+        }
+    }
+
+    if (!targetExpiresAt) {
       return NextResponse.json({ active: false });
     }
 
     const now = new Date();
-    const expiresAt = new Date(payment.expiresAt);
-    const isActive = expiresAt > now;
-    const remainingMs = Math.max(0, expiresAt.getTime() - now.getTime());
+    const isActive = targetExpiresAt > now;
+    const remainingMs = Math.max(0, targetExpiresAt.getTime() - now.getTime());
 
     // Calculate readable remaining time
     const hours = Math.floor(remainingMs / (1000 * 60 * 60));
@@ -44,9 +71,9 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       active: isActive,
-      voucherCode: payment.voucherCode,
-      packageName: payment.offer?.name || "Standard Plan",
-      expiresAt: payment.expiresAt,
+      voucherCode: targetVoucherCode,
+      packageName: targetPackageName,
+      expiresAt: targetExpiresAt,
       remaining: `${hours}h ${mins}m ${secs}s`,
       remainingMinutes: Math.floor(remainingMs / 60000)
     });

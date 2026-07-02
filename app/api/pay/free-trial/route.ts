@@ -90,13 +90,19 @@ export async function POST(req: NextRequest) {
                             `🎫 *Code:* ${bonusCode}\n\n` +
                             `Thank you for growing Starlinknet.WIFI!`;
 
-            // Note: referrerVoucher might be a phone or a previous voucher.
-            // We assume it's the identifier for WhatsApp.
-            await fetch('http://localhost:4000/send', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ phoneNumber: pendingRef.referrerVoucher, message })
-            }).catch(() => console.warn("[Trial] Referral notification failed."));
+            const normalized = pendingRef.referrerVoucher.replace(/\D/g, '');
+            const chatId = (normalized.startsWith('0') ? '254' + normalized.substring(1) : normalized) + '@c.us';
+
+            // Send via Green API directly for reliability in cloud
+            const waInstance = process.env.GREEN_API_INSTANCE_ID;
+            const waToken = process.env.GREEN_API_TOKEN;
+            if (waInstance && waToken) {
+                await fetch(`https://api.green-api.com/waInstance${waInstance}/sendMessage/${waToken}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ chatId, message })
+                }).catch(() => {});
+            }
         }
     }
 
